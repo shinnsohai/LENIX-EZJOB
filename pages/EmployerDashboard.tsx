@@ -1,0 +1,1677 @@
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import type { Job, WorkerProfile, EmployerProfile } from '../types';
+import { generateJobWithAI, generateRankedWorkersForJob } from '../services/geminiService';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { getEmployerProfile, saveEmployerProfile, uploadFile, getJobs, createJob, updateJob, deleteJob, searchWorkersInDb, getJobApplicants } from '../services/db';
+import Spinner from '../components/Spinner';
+import { countries, Country } from '../data/countries';
+import { getCurrencyForCountry, formatSalaryRange } from '../data/currencies';
+
+type View = 'DASHBOARD' | 'NEW_JOB' | 'EDIT_JOB' | 'APPLICANTS' | 'SEARCH_WORKERS_FOR_JOB';
+type JobStatus = 'Active' | 'On Hold' | 'Closed';
+
+const SearchWorkersPanel: React.FC = () => {
+    const navigate = useNavigate();
+    const [filters, setFilters] = useState({ skill: '', experience: '', country: '' });
+    const [results, setResults] = useState<WorkerProfile[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [invitedWorkers, setInvitedWorkers] = useState<Set<string>>(new Set());
+    const [selectedWorkers, setSelectedWorkers] = useState<Set<string>>(new Set());
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalResults, setTotalResults] = useState(0);
+    const RESULTS_PER_PAGE = 100;
+
+    const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        setFilters({ ...filters, [e.target.name]: e.target.value });
+    };
+
+    const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setIsSearching(true);
+        setResults([]);
+        setSelectedWorkers(new Set()); // Reset selections on new search
+        setCurrentPage(1); // Reset to first page on new search
+
+        try {
+            // Use real database search instead of AI mock
+            const searchResults = await searchWorkersInDb({
+                skill: filters.skill,
+                experience: parseInt(filters.experience, 10) || 0,
+                country: filters.country
+            });
+
+            setTotalResults(searchResults.length);
+            // Get only the first page of results
+            const paginatedResults = searchResults.slice(0, RESULTS_PER_PAGE);
+            setResults(paginatedResults);
+        } catch (error) {
+            console.error("Search failed", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const handlePageChange = async (newPage: number) => {
+        setCurrentPage(newPage);
+        setIsSearching(true);
+        setSelectedWorkers(new Set()); // Reset selections on page change
+
+        try {
+            const searchResults = await searchWorkersInDb({
+                skill: filters.skill,
+                experience: parseInt(filters.experience, 10) || 0,
+                country: filters.country
+            });
+
+            const startIndex = (newPage - 1) * RESULTS_PER_PAGE;
+            const endIndex = startIndex + RESULTS_PER_PAGE;
+            const paginatedResults = searchResults.slice(startIndex, endIndex);
+            setResults(paginatedResults);
+        } catch (error) {
+            console.error("Page change failed", error);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const totalPages = Math.ceil(totalResults / RESULTS_PER_PAGE);
+
+    const handleInvite = (workerId: string) => {
+        setInvitedWorkers(prev => new Set(prev).add(workerId));
+    };
+
+    const toggleWorkerSelection = (workerId: string) => {
+        const newSelection = new Set(selectedWorkers);
+        if (newSelection.has(workerId)) {
+            newSelection.delete(workerId);
+        } else {
+            newSelection.add(workerId);
+        }
+        setSelectedWorkers(newSelection);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedWorkers.size === results.length) {
+            setSelectedWorkers(new Set());
+        } else {
+            const allIds = new Set(results.map(w => w.id));
+            setSelectedWorkers(allIds);
+        }
+    };
+
+    const handleDownloadCVs = () => {
+        let downloadCount = 0;
+        selectedWorkers.forEach(id => {
+            const worker = results.find(w => w.id === id);
+            if (worker && worker.cv_url) {
+                // Open in new tab to trigger download/view
+                window.open(worker.cv_url, '_blank');
+                downloadCount++;
+            }
+        });
+
+        if (downloadCount === 0) {
+            alert("None of the selected workers have a CV uploaded.");
+        } else if (downloadCount < selectedWorkers.size) {
+            alert(`Opened ${downloadCount} CVs. Some selected workers did not have a CV uploaded.`);
+        }
+    };
+
+    const handleDownloadSkillPassports = () => {
+        if (selectedWorkers.size === 0) {
+            alert("Please select at least one worker.");
+            return;
+        }
+
+        selectedWorkers.forEach(id => {
+            const worker = results.find(w => w.id === id);
+            if (worker) {
+                // Open Skill Passport page in new tab
+                const passportUrl = `${window.location.origin}/#/worker/profile/${worker.id}`;
+                window.open(passportUrl, '_blank');
+            }
+        });
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Database Worker Search</h2>
+            <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end mb-6">
+                <div className="md:col-span-1">
+                    <label htmlFor="skill" className="block text-sm font-medium text-gray-700">Trade / Skill</label>
+                    <input type="text" name="skill" id="skill" value={filters.skill} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" placeholder="e.g., Welder" />
+                </div>
+                <div className="md:col-span-1">
+                    <label htmlFor="experience" className="block text-sm font-medium text-gray-700">Min. Experience (Years)</label>
+                    <input type="number" name="experience" id="experience" value={filters.experience} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" placeholder="e.g., 5" />
+                </div>
+                <div className="md:col-span-1">
+                    <label htmlFor="country" className="block text-sm font-medium text-gray-700">Country of Origin</label>
+                    <select name="country" id="country" value={filters.country} onChange={handleFilterChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500">
+                        <option value="">Any</option>
+                        {countries.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
+                    </select>
+                </div>
+                <button type="submit" disabled={isSearching} className="w-full bg-emerald-600 text-white font-bold py-2 px-4 rounded-md shadow-sm hover:bg-emerald-700 disabled:bg-emerald-300">
+                    {isSearching ? <Spinner size="sm" /> : 'Search Database'}
+                </button>
+            </form>
+
+            {isSearching ? (
+                <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Searching database...</p></div>
+            ) : (
+                <div className="space-y-4">
+                    {results.length > 0 ? (
+                        <>
+                            <div className="flex justify-between items-center bg-gray-100 p-3 rounded-md">
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={results.length > 0 && selectedWorkers.size === results.length}
+                                        onChange={toggleSelectAll}
+                                        className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                                    />
+                                    <span className="ml-2 text-sm text-gray-700">Select All on Page ({results.length})</span>
+                                </div>
+                                {selectedWorkers.size > 0 && (
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button
+                                            onClick={handleDownloadCVs}
+                                            className="bg-emerald-600 text-white text-sm font-bold py-1 px-3 rounded hover:bg-emerald-700 transition-colors flex items-center"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                            </svg>
+                                            Download Selected CVs ({selectedWorkers.size})
+                                        </button>
+                                        <button
+                                            onClick={handleDownloadSkillPassports}
+                                            className="bg-blue-600 text-white text-sm font-bold py-1 px-3 rounded hover:bg-blue-700 transition-colors flex items-center"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            Download Selected Skill Passports ({selectedWorkers.size})
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {results.map(worker => (
+                                <div key={worker.id} className={`p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start border-2 ${selectedWorkers.has(worker.id) ? 'border-emerald-500 bg-emerald-50' : 'border-transparent bg-gray-50'}`}>
+                                    <div className="flex items-start gap-3">
+                                        <div className="pt-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedWorkers.has(worker.id)}
+                                                onChange={() => toggleWorkerSelection(worker.id)}
+                                                className="h-5 w-5 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer"
+                                            />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => navigate(`/worker/profile/${worker.id}`)}
+                                                    className="font-bold text-lg text-gray-900 hover:text-emerald-600 transition-colors text-left"
+                                                >
+                                                    {worker.full_name}
+                                                </button>
+                                                {worker.cv_url && <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">CV Available</span>}
+                                            </div>
+                                            <p className="text-sm text-emerald-600 font-semibold">{worker.trade_or_skill} - {worker.experience_years} years</p>
+                                            <p className="text-xs text-gray-500 mt-1">From: {worker.country_of_origin}</p>
+                                            <p className="text-sm text-gray-600 mt-2">{worker.summary || 'No summary provided.'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 mt-4 sm:mt-0 sm:ml-4">
+                                        <button
+                                            onClick={() => handleInvite(worker.id)}
+                                            disabled={invitedWorkers.has(worker.id)}
+                                            className="bg-white border border-gray-300 text-gray-700 text-sm font-bold py-2 px-4 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {invitedWorkers.has(worker.id) ? 'Invited' : 'Invite'}
+                                        </button>
+                                        {worker.cv_url && (
+                                            <a
+                                                href={worker.cv_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-center bg-emerald-100 text-emerald-800 text-sm font-bold py-2 px-4 rounded-md hover:bg-emerald-200 transition-colors"
+                                            >
+                                                View CV
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
+                                    <div className="text-sm text-gray-600">
+                                        Showing {((currentPage - 1) * RESULTS_PER_PAGE) + 1} to {Math.min(currentPage * RESULTS_PER_PAGE, totalResults)} of {totalResults} results
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            disabled={currentPage === 1 || isSearching}
+                                            className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                            Previous
+                                        </button>
+
+                                        {/* Page Numbers */}
+                                        <div className="flex gap-1">
+                                            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                                                let pageNum;
+                                                if (totalPages <= 5) {
+                                                    pageNum = i + 1;
+                                                } else if (currentPage <= 3) {
+                                                    pageNum = i + 1;
+                                                } else if (currentPage >= totalPages - 2) {
+                                                    pageNum = totalPages - 4 + i;
+                                                } else {
+                                                    pageNum = currentPage - 2 + i;
+                                                }
+
+                                                return (
+                                                    <button
+                                                        key={pageNum}
+                                                        onClick={() => handlePageChange(pageNum)}
+                                                        disabled={isSearching}
+                                                        className={`px-3 py-1 border rounded-md text-sm font-medium transition-colors ${currentPage === pageNum
+                                                            ? 'bg-emerald-600 text-white border-emerald-600'
+                                                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                                                            } disabled:opacity-50 disabled:cursor-not-allowed`}>
+                                                        {pageNum}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            disabled={currentPage === totalPages || isSearching}
+                                            className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <p className="text-center text-gray-500 py-6">No active workers found matching your criteria.</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const EmployerDashboard: React.FC = () => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [view, setView] = useState<View>('DASHBOARD');
+    const [jobs, setJobs] = useState<Job[]>([]);
+    const [workers, setWorkers] = useState<WorkerProfile[]>([]);
+    const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+    // New state for tabs and profile
+    const [activeTab, setActiveTab] = useState<'jobs' | 'profile' | 'search'>('jobs');
+    const [employerProfile, setEmployerProfile] = useState<EmployerProfile | null>(null);
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const [logoFile, setLogoFile] = useState<File | null>(null);
+
+    // CSV Import State
+    const [showCsvModal, setShowCsvModal] = useState(false);
+    const [csvFile, setCsvFile] = useState<File | null>(null);
+    const [csvImportStatus, setCsvImportStatus] = useState<{ success: number; failed: number; errors: string[] }>({ success: 0, failed: 0, errors: [] });
+    const [isImporting, setIsImporting] = useState(false);
+
+    // AI Generation State
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiDescription, setAiDescription] = useState('');
+    const [aiSkills, setAiSkills] = useState<string[]>([]);
+
+    // Toast notification state
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const [processingAction, setProcessingAction] = useState<string | null>(null);
+
+    // Country Dropdown State
+    const [country, setCountry] = useState('United States');
+    const [currency, setCurrency] = useState(getCurrencyForCountry('United States'));
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Show toast notification
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+    };
+
+    // Update currency when country changes
+    useEffect(() => {
+        const newCurrency = getCurrencyForCountry(country);
+        setCurrency(newCurrency);
+    }, [country]);
+
+    // Load Profile and Jobs
+    useEffect(() => {
+        const loadData = async () => {
+            if (user) {
+                setFetchError(null);
+                try {
+                    // Only fetch jobs list if we are on the main dashboard view
+                    if (view === 'DASHBOARD') {
+                        setIsLoading(true);
+                        console.log("Loading employer data for user:", user.id);
+
+                        // Load Profile (we can load this once, but reloading ensures freshness)
+                        const profileData = await getEmployerProfile(user.id);
+                        console.log("Profile data loaded:", profileData);
+                        setEmployerProfile(profileData);
+
+                        // Load Jobs
+                        const jobsData = await getJobs(user.id);
+                        console.log("Jobs loaded in Dashboard:", jobsData.length);
+                        setJobs(jobsData);
+                    }
+                } catch (err: any) {
+                    console.error("Failed to load dashboard data:", err);
+                    setFetchError(err.message || "Failed to load jobs. Check database permissions.");
+                } finally {
+                    if (view === 'DASHBOARD') setIsLoading(false);
+                }
+            }
+        };
+        loadData();
+    }, [user, view]); // Reload when view changes (e.g. after add/edit which resets view to DASHBOARD)
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    // Generate AI description and skills
+    const handleGenerateAI = async () => {
+        const titleInput = document.getElementById('title') as HTMLInputElement;
+        const title = titleInput?.value;
+
+        if (!title || title.trim() === '') {
+            alert('Please enter a job title first');
+            return;
+        }
+
+        setIsGeneratingAI(true);
+        try {
+            const company = employerProfile?.company_name || 'My Company';
+            console.log("Generating AI job details...");
+            const aiDetails = await generateJobWithAI(title, company);
+            console.log("AI Details received:", aiDetails);
+
+            setAiDescription(aiDetails.description || '');
+            setAiSkills(aiDetails.required_skills || []);
+
+            // Update the form fields
+            const descriptionField = document.getElementById('description') as HTMLTextAreaElement;
+            const skillsField = document.getElementById('required_skills') as HTMLInputElement;
+
+            if (descriptionField) descriptionField.value = aiDetails.description || '';
+            if (skillsField) skillsField.value = (aiDetails.required_skills || []).join(', ');
+
+        } catch (error) {
+            console.error("Error generating AI content:", error);
+            alert("Failed to generate AI content. Please try again.");
+        } finally {
+            setIsGeneratingAI(false);
+        }
+    };
+
+    const handleCreateJob = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!user) return;
+        setIsLoading(true);
+
+        try {
+            const formData = new FormData(e.currentTarget);
+            const title = formData.get('title') as string;
+            const company = employerProfile?.company_name || 'My Company';
+            const location = formData.get('location') as string;
+            const manualDescription = formData.get('description') as string;
+            const manualSkills = formData.get('required_skills') as string;
+
+            // Safe Parsing for Salary to avoid NaN errors in Firestore
+            const salaryMinInput = formData.get('salary_min');
+            const salaryMaxInput = formData.get('salary_max');
+
+            const salary_min = salaryMinInput ? parseInt(salaryMinInput as string, 10) : 0;
+            const salary_max = salaryMaxInput ? parseInt(salaryMaxInput as string, 10) : 0;
+
+            if (isNaN(salary_min) || isNaN(salary_max)) {
+                alert("Please enter valid numbers for salary.");
+                setIsLoading(false);
+                return;
+            }
+
+            let description = manualDescription;
+            let required_skills: string[] = [];
+
+            // If manual description/skills are provided, use them
+            if (manualDescription && manualDescription.trim() !== '') {
+                description = manualDescription;
+            }
+
+            if (manualSkills && manualSkills.trim() !== '') {
+                required_skills = manualSkills.split(',').map(s => s.trim()).filter(Boolean);
+            }
+
+            // If no manual content provided, generate with AI
+            if (!description || description.trim() === '' || required_skills.length === 0) {
+                console.log("Generating AI job details...");
+                const aiDetails = await generateJobWithAI(title, company);
+                console.log("AI Details received:", aiDetails);
+
+                if (!description || description.trim() === '') {
+                    description = aiDetails.description || 'Description not available.';
+                }
+                if (required_skills.length === 0) {
+                    required_skills = aiDetails.required_skills || [];
+                }
+            }
+
+            const newJob: Omit<Job, 'id'> = {
+                employer_id: user.id,
+                employer_name: company,
+                title,
+                description,
+                required_skills,
+                status: 'Active',
+                location,
+                country,
+                salary_min,
+                salary_max,
+                currency: currency.code // Add currency code
+            };
+
+            console.log("Creating job in DB:", newJob);
+            await createJob(newJob);
+            console.log("Job created successfully");
+
+            // Reset view to dashboard which triggers a reload
+            setView('DASHBOARD');
+        } catch (error: any) {
+            console.error("Error creating job:", error);
+            alert(`Failed to create job: ${error.message || 'Unknown error'}`);
+            setIsLoading(false); // Stop loading if error keeps us on same page
+        }
+    };
+
+    const handleUpdateJob = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!selectedJob) return;
+        setIsLoading(true);
+
+        try {
+            const formData = new FormData(e.currentTarget);
+            const salaryMinInput = formData.get('salary_min');
+            const salaryMaxInput = formData.get('salary_max');
+
+            const salary_min = salaryMinInput ? parseInt(salaryMinInput as string, 10) : 0;
+            const salary_max = salaryMaxInput ? parseInt(salaryMaxInput as string, 10) : 0;
+
+            if (isNaN(salary_min) || isNaN(salary_max)) {
+                alert("Please enter valid numbers for salary.");
+                setIsLoading(false);
+                return;
+            }
+
+            const updatedData: Partial<Job> = {
+                title: formData.get('title') as string,
+                location: formData.get('location') as string,
+                country: country,
+                salary_min,
+                salary_max,
+                currency: currency.code, // Add currency code
+                description: formData.get('description') as string,
+                required_skills: (formData.get('required_skills') as string).split(',').map(s => s.trim()).filter(Boolean),
+            };
+
+            await updateJob(selectedJob.id, updatedData);
+            setSelectedJob(null);
+            setView('DASHBOARD'); // Triggers reload
+        } catch (error) {
+            console.error("Error updating job:", error);
+            alert("Failed to update job.");
+            setIsLoading(false);
+        }
+    };
+
+    const handleStartEdit = (job: Job) => {
+        setSelectedJob(job);
+        setCountry(job.country); // Set country for the dropdown in edit form
+        setView('EDIT_JOB');
+    };
+
+    const fetchAndShowApplicants = useCallback(async (job: Job) => {
+        setIsLoading(true);
+        setView('APPLICANTS');
+        setSelectedJob(job);
+        // Use real database applicants instead of AI generated ones
+        const fetchedApplicants = await getJobApplicants(job.id);
+        setWorkers(fetchedApplicants);
+        setIsLoading(false);
+    }, []);
+
+    const searchAndRankWorkersForJob = useCallback(async (job: Job) => {
+        setIsLoading(true);
+        setView('SEARCH_WORKERS_FOR_JOB');
+        setSelectedJob(job);
+        const rankedWorkers = await generateRankedWorkersForJob(job.title, job.country);
+        setWorkers(rankedWorkers);
+        setIsLoading(false);
+    }, []);
+
+    const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
+        try {
+            await updateJob(jobId, { status: newStatus });
+            setJobs(prevJobs =>
+                prevJobs.map(job =>
+                    job.id === jobId ? { ...job, status: newStatus } : job
+                )
+            );
+        } catch (error) {
+            console.error("Error updating status:", error);
+            alert("Failed to update status. Check permissions.");
+        }
+    };
+
+    const handleDeleteJob = async (jobId: string) => {
+        if (window.confirm('Are you sure you want to permanently delete this job posting? This action cannot be undone.')) {
+            try {
+                await deleteJob(jobId);
+                setJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
+            } catch (error) {
+                console.error("Error deleting job:", error);
+                alert("Failed to delete job. Check permissions.");
+            }
+        }
+    };
+
+    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setLogoFile(file);
+            setLogoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSaveProfile = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!user) return;
+        setIsLoading(true);
+
+        try {
+            const formData = new FormData(e.currentTarget);
+            const yearFoundedValue = formData.get('year_founded') as string;
+
+            let logoUrl = employerProfile?.company_logo_url;
+            if (logoFile) {
+                // Upload to 'Company_Logo' folder (Underscores for safe paths)
+                logoUrl = await uploadFile(logoFile, `Company_Logo/${user.id}/${logoFile.name}`);
+            }
+
+            // Automatically prepend https:// if missing
+            let websiteUrl = formData.get('website_url') as string;
+            if (websiteUrl && !/^https?:\/\//i.test(websiteUrl)) {
+                websiteUrl = `https://${websiteUrl}`;
+            }
+
+            // Construct object carefully to avoid 'undefined' values which crash Firestore
+            const newProfile: any = {
+                id: employerProfile?.id || user.id,
+                user_id: user.id,
+                company_name: formData.get('company_name') as string,
+                description: formData.get('description') as string || '',
+                website_url: websiteUrl || '',
+                phone: formData.get('phone') as string || '',
+                industry: formData.get('industry') as string || '',
+                company_size: formData.get('company_size') as string || '',
+                status: employerProfile?.status || 'Active',
+            };
+
+            // Only add numeric fields if they have valid values
+            if (yearFoundedValue) {
+                const parsedYear = parseInt(yearFoundedValue, 10);
+                if (!isNaN(parsedYear)) {
+                    newProfile.year_founded = parsedYear;
+                }
+            }
+
+            // Only add logo URL if it exists (either new upload or existing)
+            if (logoUrl) {
+                newProfile.company_logo_url = logoUrl;
+            }
+
+            await saveEmployerProfile(newProfile as EmployerProfile);
+            setEmployerProfile(newProfile);
+            setIsEditingProfile(false);
+            setLogoFile(null);
+        } catch (error: any) {
+            console.error("Error saving profile:", error);
+            alert(`Failed to save profile: ${error.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setCsvFile(e.target.files[0]);
+        }
+    };
+
+    const parseCsvFile = (file: File): Promise<any[]> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target?.result as string;
+                    const lines = text.split('\n').filter(line => line.trim());
+
+                    if (lines.length < 2) {
+                        reject(new Error('CSV file must contain at least a header row and one data row'));
+                        return;
+                    }
+
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    const jobs = [];
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map(v => v.trim());
+                        const job: any = {};
+
+                        headers.forEach((header, index) => {
+                            job[header] = values[index] || '';
+                        });
+
+                        jobs.push(job);
+                    }
+
+                    resolve(jobs);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    };
+
+    const handleCsvImport = async () => {
+        if (!csvFile) {
+            alert('Please select a CSV file first');
+            return;
+        }
+
+        if (!user) {
+            alert('You must be logged in to import jobs');
+            return;
+        }
+
+        setIsImporting(true);
+        setCsvImportStatus({ success: 0, failed: 0, errors: [] });
+
+        try {
+            const parsedJobs = await parseCsvFile(csvFile);
+            let successCount = 0;
+            let failedCount = 0;
+            const errors: string[] = [];
+
+            for (let i = 0; i < parsedJobs.length; i++) {
+                const row = parsedJobs[i];
+
+                try {
+                    // Validate required fields
+                    if (!row.title || !row.location || !row.country) {
+                        throw new Error(`Row ${i + 2}: Missing required fields (title, location, or country)`);
+                    }
+
+                    // Parse salary values
+                    const salary_min = parseInt(row.salary_min) || 0;
+                    const salary_max = parseInt(row.salary_max) || 0;
+
+                    if (isNaN(salary_min) || isNaN(salary_max)) {
+                        throw new Error(`Row ${i + 2}: Invalid salary values`);
+                    }
+
+                    // Parse required_skills (comma-separated in CSV)
+                    const required_skills = row.required_skills
+                        ? row.required_skills.split(';').map((s: string) => s.trim()).filter(Boolean)
+                        : [];
+
+                    // Generate AI description if not provided
+                    let description = row.description || '';
+                    if (!description) {
+                        try {
+                            const aiDetails = await generateJobWithAI(
+                                row.title,
+                                employerProfile?.company_name || 'Company'
+                            );
+                            description = aiDetails.description || 'No description available';
+
+                            // Use AI-generated skills if none provided
+                            if (required_skills.length === 0 && aiDetails.required_skills) {
+                                required_skills.push(...aiDetails.required_skills);
+                            }
+                        } catch (aiError) {
+                            console.warn(`AI generation failed for row ${i + 2}, using default`);
+                            description = `Position for ${row.title}`;
+                        }
+                    }
+
+                    const newJob: Omit<Job, 'id'> = {
+                        employer_id: user.id,
+                        employer_name: employerProfile?.company_name || 'My Company',
+                        title: row.title,
+                        description,
+                        required_skills,
+                        status: 'Active',
+                        location: row.location,
+                        country: row.country,
+                        salary_min,
+                        salary_max
+                    };
+
+                    await createJob(newJob);
+                    successCount++;
+                } catch (error: any) {
+                    failedCount++;
+                    errors.push(error.message || `Row ${i + 2}: Unknown error`);
+                }
+            }
+
+            setCsvImportStatus({ success: successCount, failed: failedCount, errors });
+
+            // Reload jobs list
+            if (successCount > 0) {
+                const jobsData = await getJobs(user.id);
+                setJobs(jobsData);
+            }
+
+        } catch (error: any) {
+            alert(`Failed to parse CSV: ${error.message}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const downloadSampleCsv = () => {
+        const sampleCsv = `title,location,country,salary_min,salary_max,description,required_skills
+Senior Plumber,San Francisco,United States,60000,80000,Experienced plumber needed for commercial projects,Pipe Installation;Leak Detection;Blueprint Reading
+Electrician,New York,United States,55000,75000,Licensed electrician for residential work,Wiring;Circuit Installation;Safety Compliance
+Welder,Houston,United States,50000,70000,Certified welder for industrial projects,MIG Welding;TIG Welding;Metal Fabrication`;
+
+        const blob = new Blob([sampleCsv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'job_import_sample.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+
+    const CountryDropdown = () => {
+        const filteredCountries = countries.filter(
+            c =>
+                c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                c.dial_code.includes(searchTerm)
+        );
+
+        const handleCountrySelect = (c: Country) => {
+            setCountry(c.name);
+            setIsDropdownOpen(false);
+            setSearchTerm('');
+        };
+
+        return (
+            <div className="relative" ref={dropdownRef}>
+                <label htmlFor="country" className="block text-sm font-medium text-gray-700">Country</label>
+                <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white text-left"
+                >
+                    <span className="flex justify-between items-center">
+                        <span>{country}</span>
+                        <span>&#9662;</span>
+                    </span>
+                </button>
+                {isDropdownOpen && (
+                    <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        <div className="p-2">
+                            <input
+                                type="text"
+                                placeholder="Search..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            />
+                        </div>
+                        <ul>
+                            {filteredCountries.map(c => (
+                                <li key={c.code}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCountrySelect(c)}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        {c.name}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    const JobStatusBadge: React.FC<{ status: JobStatus }> = ({ status }) => {
+        const baseClasses = "px-2 inline-flex text-xs leading-5 font-semibold rounded-full";
+        const statusClasses = {
+            Active: "bg-green-100 text-green-800",
+            'On Hold': "bg-yellow-100 text-yellow-800",
+            Closed: "bg-gray-100 text-gray-800",
+        };
+        return <span className={`${baseClasses} ${statusClasses[status]}`}>{status}</span>;
+    };
+
+    const JobStatusControl: React.FC<{ job: Job }> = ({ job }) => {
+        const buttonClasses = "text-xs font-medium py-1 px-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+        const activeClasses = "bg-green-200 text-green-900 hover:bg-green-300";
+        const onHoldClasses = "bg-yellow-200 text-yellow-900 hover:bg-yellow-300";
+        const closedClasses = "bg-gray-200 text-gray-900 hover:bg-gray-300";
+
+        return (
+            <div className="flex items-center gap-2">
+                <button onClick={() => handleStatusChange(job.id, 'Active')} disabled={job.status === 'Active'} className={`${buttonClasses} ${activeClasses}`}>Active</button>
+                <button onClick={() => handleStatusChange(job.id, 'On Hold')} disabled={job.status === 'On Hold'} className={`${buttonClasses} ${onHoldClasses}`}>On Hold</button>
+                <button onClick={() => handleStatusChange(job.id, 'Closed')} disabled={job.status === 'Closed'} className={`${buttonClasses} ${closedClasses}`}>Close</button>
+            </div>
+        )
+    };
+
+    const renderJobsList = () => {
+        if (fetchError) {
+            return (
+                <div className="bg-white p-6 rounded-lg shadow-md text-center">
+                    <h2 className="text-xl font-bold text-red-600 mb-2">Error Loading Jobs</h2>
+                    <p className="text-gray-600 mb-4">{fetchError}</p>
+                    <button onClick={() => { setView('NEW_JOB'); setTimeout(() => setView('DASHBOARD'), 100); }} className="bg-emerald-600 text-white py-2 px-4 rounded hover:bg-emerald-700">Retry</button>
+                </div>
+            )
+        }
+
+        return (
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-800">My Job Postings</h2>
+                    {isLoading && <Spinner size="sm" />}
+                </div>
+
+                {jobs.length === 0 && !isLoading ? (
+                    <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">No jobs posted</h3>
+                        <p className="mt-1 text-sm text-gray-500">Get started by posting a new job.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {jobs.map(job => (
+                            <div key={job.id} className="bg-gray-50 p-4 rounded-lg ">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="mb-4 sm:mb-0">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="font-bold text-lg text-gray-900">{job.title}</h3>
+                                            <JobStatusBadge status={job.status} />
+                                        </div>
+                                        <p className="text-sm text-gray-500">{job.employer_name} &middot; {job.location}, {job.country}</p>
+                                        <p className="text-sm font-semibold text-emerald-600 mt-1">
+                                            {formatSalaryRange(job.salary_min, job.salary_max, job.country)}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <button onClick={() => fetchAndShowApplicants(job)} className="bg-emerald-100 text-emerald-800 text-sm font-bold py-2 px-3 rounded-md hover:bg-emerald-200 transition-colors">View Applicants</button>
+                                        <button onClick={() => searchAndRankWorkersForJob(job)} className="bg-gray-100 text-gray-800 text-sm font-bold py-2 px-3 rounded-md hover:bg-gray-200 transition-colors">Search Workers</button>
+                                    </div>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                    <JobStatusControl job={job} />
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => handleStartEdit(job)} className="text-sm font-medium text-emerald-600 hover:text-emerald-500">Edit</button>
+                                        <button onClick={() => handleDeleteJob(job.id)} className="text-sm font-medium text-red-600 hover:text-red-500">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderProfileContent = () => {
+        if (isLoading) {
+            return <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Loading profile...</p></div>;
+        }
+
+        if (isEditingProfile) {
+            return (
+                <div className="bg-white p-8 rounded-lg shadow-lg">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-6">{employerProfile ? 'Edit' : 'Create'} Company Profile</h2>
+                    <form onSubmit={handleSaveProfile} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Company Logo</label>
+                                <div className="mt-1 flex items-center space-x-4">
+                                    <span className="inline-block h-16 w-16 rounded-md overflow-hidden bg-gray-100">
+                                        {logoPreview ? (
+                                            <img className="h-full w-full object-contain" src={logoPreview} alt="Logo preview" />
+                                        ) : (
+                                            <svg className="h-full w-full text-gray-300 p-1" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"></path><path d="M14.14 11.86l-3 3.87-2.14-2.58-3 3.87H18z"></path>
+                                            </svg>
+                                        )}
+                                    </span>
+                                    <label htmlFor="logo_upload" className="cursor-pointer bg-white py-2 px-3 border border-gray-300 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                                        <span>Change</span>
+                                        <input id="logo_upload" name="logo_upload" type="file" className="sr-only" accept="image/*" onChange={handleLogoChange} />
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="md:col-span-1"></div> {/* Spacer */}
+                            <div>
+                                <label htmlFor="company_name" className="block text-sm font-medium text-gray-700">Company Name</label>
+                                <input type="text" name="company_name" id="company_name" defaultValue={employerProfile?.company_name} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" />
+                            </div>
+                            <div>
+                                <label htmlFor="website_url" className="block text-sm font-medium text-gray-700">Website URL</label>
+                                <input type="text" name="website_url" id="website_url" defaultValue={employerProfile?.website_url} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="www.example.com" />
+                            </div>
+                            <div>
+                                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
+                                <input type="tel" name="phone" id="phone" defaultValue={employerProfile?.phone} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="+1 (555) 123-4567" />
+                            </div>
+                            <div>
+                                <label htmlFor="industry" className="block text-sm font-medium text-gray-700">Industry</label>
+                                <input type="text" name="industry" id="industry" defaultValue={employerProfile?.industry} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="e.g., Construction" />
+                            </div>
+                            <div>
+                                <label htmlFor="company_size" className="block text-sm font-medium text-gray-700">Company Size</label>
+                                <select name="company_size" id="company_size" defaultValue={employerProfile?.company_size || ''} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">
+                                    <option value="">Select a size</option>
+                                    <option value="1-10 employees">1-10 employees</option>
+                                    <option value="11-50 employees">11-50 employees</option>
+                                    <option value="51-200 employees">51-200 employees</option>
+                                    <option value="201-500 employees">201-500 employees</option>
+                                    <option value="501+ employees">501+ employees</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="year_founded" className="block text-sm font-medium text-gray-700">Year Founded</label>
+                                <input type="number" name="year_founded" id="year_founded" defaultValue={employerProfile?.year_founded} min="1800" max={new Date().getFullYear()} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="e.g., 2010" />
+                            </div>
+                        </div>
+                        <div className="col-span-1 md:col-span-2">
+                            <label htmlFor="description" className="block text-sm font-medium text-gray-700">Company Description</label>
+                            <textarea name="description" id="description" rows={4} defaultValue={employerProfile?.description} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm" placeholder="Tell us about your company..."></textarea>
+                        </div>
+                        <div className="flex justify-end gap-4">
+                            <button type="button" onClick={() => setIsEditingProfile(false)} className="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                            <button type="submit" disabled={isLoading} className="bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-emerald-700">
+                                {isLoading ? 'Saving...' : 'Save Profile'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+        if (employerProfile) {
+            return (
+                <div className="bg-white p-8 rounded-lg shadow-lg">
+                    <div className="flex justify-between items-start mb-6">
+                        <div className="flex items-center space-x-4">
+                            <span className="inline-block h-20 w-20 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                                {employerProfile.company_logo_url ? (
+                                    <img className="h-full w-full object-contain" src={employerProfile.company_logo_url} alt="Company Logo" />
+                                ) : (
+                                    <svg className="h-full w-full text-gray-300 p-2" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"></path><path d="M14.14 11.86l-3 3.87-2.14-2.58-3 3.87H18z"></path>
+                                    </svg>
+                                )}
+                            </span>
+                            <div>
+                                <h2 className="text-3xl font-bold text-gray-900">{employerProfile.company_name}</h2>
+                            </div>
+                        </div>
+                        <button onClick={() => {
+                            setLogoPreview(employerProfile.company_logo_url || null);
+                            setIsEditingProfile(true);
+                        }} className="text-sm font-medium text-emerald-600 hover:text-emerald-500 self-start mt-2">Edit Profile</button>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-800">About Us</h3>
+                        <p className="mt-2 text-gray-600 whitespace-pre-wrap">{employerProfile.description || 'No description provided.'}</p>
+                    </div>
+
+                    <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 border-t pt-6">
+                        {employerProfile.website_url && (
+                            <div className="bg-gray-50 p-4 rounded-md">
+                                <p className="text-sm text-gray-500">Website</p>
+                                <a href={employerProfile.website_url} target="_blank" rel="noopener noreferrer" className="font-semibold text-lg text-emerald-600 hover:underline break-words">{employerProfile.website_url}</a>
+                            </div>
+                        )}
+                        {employerProfile.phone && (
+                            <div className="bg-gray-50 p-4 rounded-md">
+                                <p className="text-sm text-gray-500">Phone</p>
+                                <p className="font-semibold text-lg">{employerProfile.phone}</p>
+                            </div>
+                        )}
+                        {employerProfile.industry && (
+                            <div className="bg-gray-50 p-4 rounded-md">
+                                <p className="text-sm text-gray-500">Industry</p>
+                                <p className="font-semibold text-lg">{employerProfile.industry}</p>
+                            </div>
+                        )}
+                        {employerProfile.company_size && (
+                            <div className="bg-gray-50 p-4 rounded-md">
+                                <p className="text-sm text-gray-500">Company Size</p>
+                                <p className="font-semibold text-lg">{employerProfile.company_size}</p>
+                            </div>
+                        )}
+                        {employerProfile.year_founded && (
+                            <div className="bg-gray-50 p-4 rounded-md">
+                                <p className="text-sm text-gray-500">Year Founded</p>
+                                <p className="font-semibold text-lg">{employerProfile.year_founded}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="text-center bg-white p-10 rounded-lg shadow-md">
+                <h2 className="text-2xl font-bold text-gray-800">Set Up Your Company Profile</h2>
+                <p className="mt-2 text-gray-600">Add your company details to attract the best talent.</p>
+                <button onClick={() => {
+                    setLogoPreview(null);
+                    setIsEditingProfile(true);
+                }} className="mt-6 bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-emerald-700 transition-colors">
+                    Create Profile
+                </button>
+            </div>
+        );
+    };
+
+    const renderContent = () => {
+        switch (view) {
+            case 'NEW_JOB':
+            case 'EDIT_JOB':
+                const isEditing = view === 'EDIT_JOB';
+                if (isEditing && !selectedJob) {
+                    // Should not happen, but as a safeguard
+                    setView('DASHBOARD');
+                    return null;
+                }
+                return (
+                    <div>
+                        <button onClick={() => setView('DASHBOARD')} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
+                        <div className="bg-white p-8 rounded-lg shadow-lg">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-6">{isEditing ? 'Edit Job Posting' : 'Create a New Job Posting'}</h2>
+                            <form onSubmit={isEditing ? handleUpdateJob : handleCreateJob} className="space-y-6">
+                                <div>
+                                    <label htmlFor="title" className="block text-sm font-medium text-gray-700">Job Title</label>
+                                    <input type="text" name="title" id="title" required defaultValue={isEditing ? selectedJob?.title : ''} placeholder="e.g., Senior Plumber" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                </div>
+                                <div>
+                                    <label htmlFor="location" className="block text-sm font-medium text-gray-700">Work Location</label>
+                                    <input type="text" name="location" id="location" required defaultValue={isEditing ? selectedJob?.location : ''} placeholder="e.g., San Francisco, CA" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                </div>
+                                <CountryDropdown />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label htmlFor="salary_min" className="block text-sm font-medium text-gray-700">
+                                            Minimum Salary (Annual) - {currency.symbol} {currency.code}
+                                        </label>
+                                        <input type="number" name="salary_min" id="salary_min" required defaultValue={isEditing ? selectedJob?.salary_min : ''} placeholder={`e.g., 50000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="salary_max" className="block text-sm font-medium text-gray-700">
+                                            Maximum Salary (Annual) - {currency.symbol} {currency.code}
+                                        </label>
+                                        <input type="number" name="salary_max" id="salary_max" required defaultValue={isEditing ? selectedJob?.salary_max : ''} placeholder={`e.g., 70000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                    </div>
+                                </div>
+
+                                {/* Description and Skills - Always visible */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                                            Job Description {!isEditing && <span className="text-gray-500">(Optional - AI can generate)</span>}
+                                        </label>
+                                        {!isEditing && (
+                                            <button
+                                                type="button"
+                                                onClick={handleGenerateAI}
+                                                disabled={isGeneratingAI}
+                                                className="inline-flex items-center px-3 py-1 border border-emerald-300 text-sm font-medium rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {isGeneratingAI ? (
+                                                    <>
+                                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-emerald-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Generating...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                        </svg>
+                                                        Generate with AI
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                    <textarea
+                                        name="description"
+                                        id="description"
+                                        rows={6}
+                                        defaultValue={isEditing ? selectedJob?.description : ''}
+                                        placeholder="Enter job description or click 'Generate with AI' to auto-generate..."
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="required_skills" className="block text-sm font-medium text-gray-700">
+                                        Required Skills (comma-separated) {!isEditing && <span className="text-gray-500">(Optional - AI can generate)</span>}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="required_skills"
+                                        id="required_skills"
+                                        defaultValue={isEditing ? selectedJob?.required_skills.join(', ') : ''}
+                                        placeholder="e.g., Plumbing, Pipe Fitting, Blueprint Reading"
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                                    />
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <button type="submit" disabled={isLoading || isGeneratingAI} className="w-full sm:w-auto bg-emerald-600 text-white font-bold py-2 px-6 rounded-lg shadow-md hover:bg-emerald-700 transition-colors disabled:bg-emerald-300">
+                                        {isLoading ? 'Creating...' : isEditing ? 'Update Job' : 'Create Job'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            case 'APPLICANTS':
+                return (
+                    <div>
+                        <button onClick={() => { setView('DASHBOARD'); setWorkers([]); }} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-4">Applicants for {selectedJob?.title}</h2>
+                        {isLoading ? (
+                            <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Finding applicants...</p></div>
+                        ) : workers.length === 0 ? (<p className="text-gray-500">No applicants found for this job.</p>) : (
+                            <div>
+                                <div className="space-y-4">
+                                    {workers.map(app => (
+                                        <div key={app.id} className="bg-white p-4 rounded-lg shadow-md">
+                                            <div className="flex items-start">
+                                                <div className="ml-4 flex-grow">
+                                                    <h3 className="font-bold text-lg">{app.full_name}</h3>
+                                                    <p className="text-sm text-emerald-600 font-semibold">{app.trade_or_skill} - {app.experience_years} years total</p>
+                                                    <p className="text-xs text-gray-500 mt-1">{app.summary}</p>
+                                                    <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                                                        <div className="flex items-center">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9V3m0 9a9 9 0 019-9" /></svg>
+                                                            <span className="ml-1.5">From: <span className="font-semibold text-gray-800">{app.country_of_origin}</span></span>
+                                                        </div>
+                                                        <div className="flex items-center">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                                            <span className="ml-1.5"><span className="font-semibold text-gray-800">{app.experience_in_country} years</span> exp. in {selectedJob?.country}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2 mt-3">
+                                                <button
+                                                    onClick={() => navigate(`/worker/profile/${app.user_id}`)}
+                                                    className="bg-blue-100 text-blue-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-blue-200 transition-colors"
+                                                >
+                                                    View Skill Passport
+                                                </button>
+                                                {app.cv_url && (
+                                                    <a
+                                                        href={app.cv_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="bg-emerald-100 text-emerald-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-emerald-200"
+                                                    >
+                                                        View CV
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={async () => {
+                                                        const confirmed = window.confirm(`Shortlist ${app.full_name} for this position?`);
+                                                        if (confirmed) {
+                                                            setProcessingAction(app.id);
+                                                            // Simulate processing
+                                                            await new Promise(resolve => setTimeout(resolve, 800));
+                                                            setProcessingAction(null);
+                                                            showToast(`✅ ${app.full_name} has been shortlisted! Check your shortlist to contact them.`, 'success');
+                                                            // TODO: await updateApplicationStatus(applicationId, 'Shortlisted');
+                                                        }
+                                                    }}
+                                                    disabled={processingAction === app.id}
+                                                    className={`bg-emerald-100 text-emerald-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-emerald-200 transition-all duration-200 ${processingAction === app.id ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
+                                                >
+                                                    {processingAction === app.id ? (
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            Processing...
+                                                        </span>
+                                                    ) : 'Shortlist'}
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (window.confirm(`Are you sure you want to reject ${app.full_name}'s application?\n\nThis action will notify the applicant.`)) {
+                                                            setProcessingAction(`reject-${app.id}`);
+                                                            // Simulate processing
+                                                            await new Promise(resolve => setTimeout(resolve, 800));
+                                                            setProcessingAction(null);
+                                                            showToast(`❌ ${app.full_name}'s application has been rejected.`, 'error');
+                                                            // TODO: await updateApplicationStatus(applicationId, 'Rejected');
+                                                            // Remove from view with animation
+                                                            setTimeout(() => {
+                                                                setWorkers(prev => prev.filter(w => w.id !== app.id));
+                                                            }, 500);
+                                                        }
+                                                    }}
+                                                    disabled={processingAction === `reject-${app.id}`}
+                                                    className={`bg-red-100 text-red-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-red-200 transition-all duration-200 ${processingAction === `reject-${app.id}` ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
+                                                >
+                                                    {processingAction === `reject-${app.id}` ? (
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            Rejecting...
+                                                        </span>
+                                                    ) : 'Reject'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            case 'SEARCH_WORKERS_FOR_JOB':
+                return (
+                    <div>
+                        <button onClick={() => { setView('DASHBOARD'); setWorkers([]); }} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-1">Search for Workers</h2>
+                        <p className="text-gray-600 mb-4">AI-powered search for: <span className="font-semibold">{selectedJob?.title}</span></p>
+
+                        {isLoading ? (
+                            <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Our AI is searching and ranking candidates...</p></div>
+                        ) : workers.length === 0 ? (<p className="text-gray-500">Our AI couldn't find any matching workers at this time.</p>) : (
+                            <div>
+                                <div className="space-y-4">
+                                    {workers.map(worker => (
+                                        <div key={worker.id} className="bg-white p-4 rounded-lg shadow-md flex items-start">
+                                            <div className="flex-grow">
+                                                <h3 className="font-bold text-lg">{worker.full_name}</h3>
+                                                <p className="text-sm text-emerald-600 font-semibold">{worker.trade_or_skill} - {worker.experience_years} years total</p>
+                                                <p className="text-xs text-gray-500 mt-1">{worker.summary}</p>
+                                                <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                                                    <div className="flex items-center">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9V3m0 9a9 9 0 019-9" /></svg>
+                                                        <span className="ml-1.5">From: <span className="font-semibold text-gray-800">{worker.country_of_origin}</span></span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                                        <span className="ml-1.5"><span className="font-semibold text-gray-800">{worker.experience_in_country} years</span> exp. in {selectedJob?.country}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-center justify-center ml-4 px-4">
+                                                <span className="text-xs text-gray-500">Match Score</span>
+                                                <span className="text-2xl font-bold text-emerald-600">{worker.composite_score || 'N/A'}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            case 'DASHBOARD':
+            default:
+                return (
+                    <div className="space-y-8">
+                        {/* Header Area */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-2 border-b border-slate-200">
+                            <div>
+                                <span className="font-mono text-xs uppercase tracking-widest text-cyan-700 font-bold">Workspace Intelligence</span>
+                                <h1 className="text-3xl font-extrabold text-slate-900 mt-0.5">Employer Dashboard</h1>
+                                <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+                                    Overview of active requisitions, pipeline metrics, and AI-driven candidate matches powered by EZJOB by LENIX.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <button
+                                    onClick={() => setShowCsvModal(true)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors flex items-center gap-2 border border-slate-300 shadow-sm"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Import CSV
+                                </button>
+                                <button 
+                                    onClick={() => setView('NEW_JOB')} 
+                                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs uppercase tracking-wider px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                                >
+                                    <span className="text-base font-bold leading-none">+</span>
+                                    New Requisition
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Metrics Bento Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Metric 1: Active Jobs */}
+                            <div className="bg-slate-900 text-white p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-sm border border-slate-800">
+                                <div className="flex justify-between items-start">
+                                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">Active Jobs</span>
+                                    <span className="material-symbols-outlined text-cyan-400 text-[20px]">work</span>
+                                </div>
+                                <div className="flex items-baseline gap-3 mt-4">
+                                    <span className="text-3xl font-extrabold text-white font-mono">{jobs.filter(j => j.status === 'Active').length}</span>
+                                    <span className="text-xs text-cyan-400 font-mono">/ {jobs.length} Total</span>
+                                </div>
+                            </div>
+
+                            {/* Metric 2: Candidates */}
+                            <div className="bg-gradient-to-tr from-cyan-900/40 to-slate-900 text-white p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-sm border border-cyan-800/40">
+                                <div className="flex justify-between items-start">
+                                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">Pipeline Reach</span>
+                                    <span className="material-symbols-outlined text-cyan-300 text-[20px]">groups</span>
+                                </div>
+                                <div className="flex items-baseline gap-3 mt-4">
+                                    <span className="text-3xl font-extrabold text-white font-mono">1,240+</span>
+                                    <span className="text-xs text-emerald-400 font-mono font-bold">+18% MoM</span>
+                                </div>
+                            </div>
+
+                            {/* Metric 3: Time to Hire */}
+                            <div className="bg-white p-6 rounded-2xl flex flex-col justify-between shadow-sm border border-slate-200">
+                                <div className="flex justify-between items-start">
+                                    <span className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold">Avg. Placement</span>
+                                    <span className="material-symbols-outlined text-slate-400 text-[20px]">timer</span>
+                                </div>
+                                <div className="flex items-baseline gap-2 mt-4">
+                                    <span className="text-3xl font-extrabold text-slate-900 font-mono">24</span>
+                                    <span className="text-sm font-semibold text-slate-500">hours</span>
+                                    <span className="text-xs text-cyan-600 font-mono font-bold ml-auto">98% Faster</span>
+                                </div>
+                            </div>
+
+                            {/* Metric 4: AI Match Rate */}
+                            <div className="bg-gradient-to-tr from-fuchsia-950/40 to-slate-900 text-white p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-sm border border-fuchsia-800/40">
+                                <div className="flex justify-between items-start">
+                                    <span className="font-mono text-xs uppercase tracking-widest text-fuchsia-400 font-bold">AI Match Rate</span>
+                                    <span className="material-symbols-outlined text-fuchsia-400 text-[20px]">auto_awesome</span>
+                                </div>
+                                <div className="flex items-baseline gap-3 mt-4">
+                                    <span className="text-3xl font-extrabold text-white font-mono">94%</span>
+                                    <span className="text-xs text-fuchsia-300 font-mono">Precision Match</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AI Job Studio Promo Banner */}
+                        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-7 rounded-3xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl">
+                            <div className="absolute -right-20 -top-20 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                            <div className="relative z-10 max-w-xl">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="material-symbols-outlined text-cyan-400 text-[18px]">auto_awesome</span>
+                                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">EZJOB AI Job Studio</span>
+                                </div>
+                                <h3 className="text-2xl font-extrabold text-white">Automate Your Next Requisition</h3>
+                                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                                    Generate comprehensive skilled trade job ads with automatic salary benchmarking and skills matching in 10 seconds.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setView('NEW_JOB')}
+                                className="relative z-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider px-6 py-3.5 rounded-full font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-lg cursor-pointer"
+                            >
+                                Launch Studio
+                                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                            </button>
+                        </div>
+
+                        {/* Navigation Tabs */}
+                        <div className="border-b border-slate-200">
+                            <nav className="-mb-px flex space-x-6 sm:space-x-8 font-mono text-xs uppercase" aria-label="Tabs">
+                                <button
+                                    onClick={() => setActiveTab('jobs')}
+                                    className={`${activeTab === 'jobs' ? 'border-cyan-600 text-cyan-700 font-bold' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 font-semibold'} whitespace-nowrap py-3.5 px-1 border-b-2 transition-colors`}
+                                >
+                                    My Requisitions ({jobs.length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('profile')}
+                                    className={`${activeTab === 'profile' ? 'border-cyan-600 text-cyan-700 font-bold' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 font-semibold'} whitespace-nowrap py-3.5 px-1 border-b-2 transition-colors`}
+                                >
+                                    Company Profile
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('search')}
+                                    className={`${activeTab === 'search' ? 'border-cyan-600 text-cyan-700 font-bold' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 font-semibold'} whitespace-nowrap py-3.5 px-1 border-b-2 transition-colors`}
+                                >
+                                    Find Verified Workers
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Tab Content */}
+                        {activeTab === 'jobs' && renderJobsList()}
+                        {activeTab === 'profile' && renderProfileContent()}
+                        {activeTab === 'search' && <SearchWorkersPanel />}
+                    </div>
+                );
+        }
+    };
+
+    return (
+        <>
+            {renderContent()}
+
+            {/* CSV Import Modal */}
+            {showCsvModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold text-gray-900">Import Jobs from CSV</h2>
+                                <button
+                                    onClick={() => { setShowCsvModal(false); setCsvFile(null); setCsvImportStatus({ success: 0, failed: 0, errors: [] }); }}
+                                    className="text-gray-400 hover:text-gray-600">
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-2">CSV Format Requirements</h3>
+                                <p className="text-sm text-gray-600 mb-3">
+                                    Your CSV file must include the following columns: <strong>title, location, country, salary_min, salary_max</strong>.
+                                    Optional columns: <strong>description, required_skills</strong> (use semicolons to separate multiple skills).
+                                </p>
+                                <button
+                                    onClick={downloadSampleCsv}
+                                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Download Sample CSV
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleCsvFileChange}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-300 rounded-md cursor-pointer">
+                                </input>
+                                {csvFile && (
+                                    <p className="mt-2 text-sm text-gray-600">
+                                        Selected: <span className="font-medium">{csvFile.name}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {csvImportStatus.success > 0 || csvImportStatus.failed > 0 ? (
+                                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                                    <h4 className="font-semibold text-gray-800 mb-2">Import Results</h4>
+                                    <div className="space-y-2">
+                                        {csvImportStatus.success > 0 && (
+                                            <p className="text-sm text-green-600">
+                                                ✓ Successfully imported {csvImportStatus.success} job(s)
+                                            </p>
+                                        )}
+                                        {csvImportStatus.failed > 0 && (
+                                            <div>
+                                                <p className="text-sm text-red-600 font-medium">
+                                                    ✗ Failed to import {csvImportStatus.failed} job(s)
+                                                </p>
+                                                {csvImportStatus.errors.length > 0 && (
+                                                    <div className="mt-2 max-h-32 overflow-y-auto">
+                                                        <p className="text-xs text-gray-600 font-semibold mb-1">Errors:</p>
+                                                        {csvImportStatus.errors.map((error, idx) => (
+                                                            <p key={idx} className="text-xs text-red-500">• {error}</p>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => { setShowCsvModal(false); setCsvFile(null); setCsvImportStatus({ success: 0, failed: 0, errors: [] }); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCsvImport}
+                                    disabled={!csvFile || isImporting}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+                                    {isImporting ? (
+                                        <>
+                                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Importing...
+                                        </>
+                                    ) : (
+                                        'Import Jobs'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+                    <div className={`px-6 py-4 rounded-lg shadow-2xl border-l-4 flex items-start gap-3 max-w-md ${toast.type === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' :
+                        toast.type === 'error' ? 'bg-red-50 border-red-500 text-red-900' :
+                            'bg-blue-50 border-blue-500 text-blue-900'
+                        }`}>
+                        <div className="flex-shrink-0 mt-0.5">
+                            {toast.type === 'success' && (
+                                <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            )}
+                            {toast.type === 'error' && (
+                                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            )}
+                            {toast.type === 'info' && (
+                                <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            )}
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-medium leading-relaxed">{toast.message}</p>
+                        </div>
+                        <button
+                            onClick={() => setToast(null)}
+                            className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+};
+
+export default EmployerDashboard;

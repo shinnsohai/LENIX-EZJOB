@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EZJOB by LENIX - Skilled Trades & Technical Talent Matcher</title>
+    <link rel="icon" type="image/png" href="/assets/lenix-logo-light.png">
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Material Symbols Outlined -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        surface: "#fcf8fa",
+                        "surface-dim": "#dcd9db",
+                        "surface-bright": "#fcf8fa",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f6f3f5",
+                        "surface-container": "#f0edef",
+                        "surface-container-high": "#eae7e9",
+                        "surface-container-highest": "#e4e2e4",
+                        "on-surface": "#1b1b1d",
+                        "on-surface-variant": "#45464d",
+                        "inverse-surface": "#303032",
+                        "inverse-on-surface": "#f3f0f2",
+                        outline: "#76777d",
+                        "outline-variant": "#c6c6cd",
+                        "surface-tint": "#565e74",
+                        primary: "#000000",
+                        "on-primary": "#ffffff",
+                        "primary-container": "#131b2e",
+                        "on-primary-container": "#7c839b",
+                        "inverse-primary": "#bec6e0",
+                        secondary: "#00687a",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#57dffe",
+                        "on-secondary-container": "#006172",
+                        "secondary-fixed": "#acedff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "brand-blue": "#3b82f6",
+                        "brand-cyan": "#06b6d4",
+                        "brand-magenta": "#d946ef",
+                        "brand-orange": "#f97316",
+                        "surface-dark": "#020617",
+                        "surface-card-dark": "#0f172a",
+                        "surface-container-dark": "#1e293b",
+                        "primary-fixed": "#dae2fd",
+                        "primary-fixed-dim": "#bec6e0",
+                        "tertiary-container": "#271901",
+                        "tertiary-fixed": "#fcdeb5",
+                        "tertiary-fixed-dim": "#dec29a"
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                        mono: ["JetBrains Mono", "monospace"],
+                        display: ["Inter", "sans-serif"],
+                        label: ["JetBrains Mono", "monospace"]
+                    }
+                }
+            }
+        };
+    </script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://aistudiocdn.com/react@^19.1.1/",
+        "react": "https://aistudiocdn.com/react@^19.1.1",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+        "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.8.2",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.17.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js",
+        "firebase/storage": "https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+        "react-player": "https://esm.sh/react-player@2.16.0",
+        "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+      }
+    }
+    </script>
+    <link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-surface font-sans text-on-surface antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

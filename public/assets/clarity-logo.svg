@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60" fill="none">
+  <!-- Circle & Buildings Icon -->
+  <g transform="translate(5, 5)">
+    <!-- Outer Navy Ring -->
+    <circle cx="25" cy="25" r="23" stroke="#1e293b" stroke-width="4" fill="none" />
+    <circle cx="25" cy="25" r="23" stroke="#f97316" stroke-width="4" stroke-dasharray="35 110" stroke-linecap="round" fill="none" />
+    
+    <!-- Stylized Skyscrapers in gold/orange and navy -->
+    <path d="M16 36 V24 H21 V36 Z" fill="#1e293b" />
+    <path d="M22 36 V15 H28 V36 Z" fill="#f97316" />
+    <path d="M29 36 V20 H34 V36 Z" fill="#ea580c" />
+    
+    <!-- Small window accents -->
+    <rect x="24" y="18" width="2" height="2.5" fill="#ffffff" opacity="0.9" />
+    <rect x="24" y="23" width="2" height="2.5" fill="#ffffff" opacity="0.9" />
+    <rect x="24" y="28" width="2" height="2.5" fill="#ffffff" opacity="0.9" />
+  </g>
+
+  <!-- Typography -->
+  <text x="65" y="32" font-family="'Inter', sans-serif" font-weight="900" font-size="22" fill="#1e293b" letter-spacing="1">CLARITY</text>
+  <text x="65" y="45" font-family="'JetBrains Mono', monospace" font-weight="800" font-size="9" fill="#f97316" letter-spacing="1.5">E&amp;C PTE. LTD.</text>
+  <text x="65" y="54" font-family="'Inter', sans-serif" font-weight="500" font-size="6" fill="#64748b" letter-spacing="1">Connect • Value • Innovation</text>
+</svg>
