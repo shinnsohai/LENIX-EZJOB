@@ -56,7 +56,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        const profile = await fetchProfile(session.user.id);
+        let profile: User | null = null;
+        try {
+            profile = await fetchProfile(session.user.id);
+        } catch (error) {
+            console.error('AuthContext: failed to fetch profile', error);
+        }
 
         if (requestIdRef.current !== requestId) {
             // A newer auth event superseded this one; discard the result.
@@ -68,9 +73,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            applySession(session);
-        });
+        supabase.auth.getSession()
+            .then(({ data: { session } }) => applySession(session))
+            .catch((error) => {
+                // Network failure or misconfigured Supabase env vars — fail
+                // open to a logged-out state rather than hanging on
+                // `loading` forever (which would block the whole app,
+                // since children only render once loading is false).
+                console.error('AuthContext: failed to resolve session', error);
+                setUser(null);
+                setLoading(false);
+            });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             applySession(session);
