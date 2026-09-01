@@ -1,16 +1,37 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { Job, WorkerProfile, EmployerProfile } from '../types';
-import { generateJobWithAI, generateRankedWorkersForJob } from '../services/geminiService';
+import Papa from 'papaparse';
+import type { Job, WorkerProfile, EmployerProfile, Application } from '../types';
+import { generateJobWithAI } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { getEmployerProfile, saveEmployerProfile, uploadFile, getJobs, createJob, updateJob, deleteJob, searchWorkersInDb, getJobApplicants } from '../services/db';
+import {
+    getEmployerProfile,
+    saveEmployerProfile,
+    uploadFile,
+    getJobs,
+    createJob,
+    updateJob,
+    deleteJob,
+    searchWorkersInDb,
+    getJobApplicants,
+    updateApplicationStatus,
+} from '../services/db';
 import Spinner from '../components/Spinner';
 import { countries, Country } from '../data/countries';
 import { getCurrencyForCountry, formatSalaryRange } from '../data/currencies';
 
-type View = 'DASHBOARD' | 'NEW_JOB' | 'EDIT_JOB' | 'APPLICANTS' | 'SEARCH_WORKERS_FOR_JOB';
+type View = 'DASHBOARD' | 'NEW_JOB' | 'EDIT_JOB' | 'APPLICANTS';
 type JobStatus = 'Active' | 'On Hold' | 'Closed';
+
+const EMPTY_JOB_FORM = {
+    title: '',
+    location: '',
+    salary_min: '',
+    salary_max: '',
+    description: '',
+    required_skills: '',
+};
 
 const SearchWorkersPanel: React.FC = () => {
     const navigate = useNavigate();
@@ -37,17 +58,19 @@ const SearchWorkersPanel: React.FC = () => {
         setCurrentPage(1); // Reset to first page on new search
 
         try {
-            // Use real database search instead of AI mock
-            const searchResults = await searchWorkersInDb({
+            // Real, paginated Postgres query — page/pageSize are pushed down
+            // to the query itself rather than fetching everything and
+            // slicing client-side.
+            const { workers, total } = await searchWorkersInDb({
                 skill: filters.skill,
                 experience: parseInt(filters.experience, 10) || 0,
-                country: filters.country
+                country: filters.country,
+                page: 1,
+                pageSize: RESULTS_PER_PAGE,
             });
 
-            setTotalResults(searchResults.length);
-            // Get only the first page of results
-            const paginatedResults = searchResults.slice(0, RESULTS_PER_PAGE);
-            setResults(paginatedResults);
+            setTotalResults(total);
+            setResults(workers);
         } catch (error) {
             console.error("Search failed", error);
         } finally {
@@ -61,16 +84,16 @@ const SearchWorkersPanel: React.FC = () => {
         setSelectedWorkers(new Set()); // Reset selections on page change
 
         try {
-            const searchResults = await searchWorkersInDb({
+            const { workers, total } = await searchWorkersInDb({
                 skill: filters.skill,
                 experience: parseInt(filters.experience, 10) || 0,
-                country: filters.country
+                country: filters.country,
+                page: newPage,
+                pageSize: RESULTS_PER_PAGE,
             });
 
-            const startIndex = (newPage - 1) * RESULTS_PER_PAGE;
-            const endIndex = startIndex + RESULTS_PER_PAGE;
-            const paginatedResults = searchResults.slice(startIndex, endIndex);
-            setResults(paginatedResults);
+            setTotalResults(total);
+            setResults(workers);
         } catch (error) {
             console.error("Page change failed", error);
         } finally {
@@ -130,8 +153,10 @@ const SearchWorkersPanel: React.FC = () => {
         selectedWorkers.forEach(id => {
             const worker = results.find(w => w.id === id);
             if (worker) {
-                // Open Skill Passport page in new tab
-                const passportUrl = `${window.location.origin}/#/worker/profile/${worker.id}`;
+                // Open Skill Passport page in new tab. getWorkerProfile looks
+                // up by auth user id, so the link must use user_id, not the
+                // worker_profiles row's own id.
+                const passportUrl = `${window.location.origin}/#/worker/profile/${worker.user_id}`;
                 window.open(passportUrl, '_blank');
             }
         });
@@ -215,7 +240,7 @@ const SearchWorkersPanel: React.FC = () => {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <button
-                                                    onClick={() => navigate(`/worker/profile/${worker.id}`)}
+                                                    onClick={() => navigate(`/worker/profile/${worker.user_id}`)}
                                                     className="font-bold text-lg text-gray-900 hover:text-emerald-600 transition-colors text-left"
                                                 >
                                                     {worker.full_name}
@@ -317,9 +342,18 @@ const EmployerDashboard: React.FC = () => {
     const [view, setView] = useState<View>('DASHBOARD');
     const [jobs, setJobs] = useState<Job[]>([]);
     const [workers, setWorkers] = useState<WorkerProfile[]>([]);
+    // Maps worker user_id -> {applicationId, status} for the job currently
+    // being viewed in the Applicants tab. getJobApplicants only returns
+    // WorkerProfile rows (no application id), so this small side lookup is
+    // what lets Shortlist/Reject persist against the right applications row.
+    const [applicantMeta, setApplicantMeta] = useState<Map<string, { applicationId: string; status: Application['status'] }>>(new Map());
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
+
+    // Controlled state for the New/Edit Job form (replaces the old
+    // document.getElementById reads used by the AI-generate flow).
+    const [jobForm, setJobForm] = useState(EMPTY_JOB_FORM);
 
     // New state for tabs and profile
     const [activeTab, setActiveTab] = useState<'jobs' | 'profile' | 'search'>('jobs');
@@ -379,7 +413,7 @@ const EmployerDashboard: React.FC = () => {
                         setEmployerProfile(profileData);
 
                         // Load Jobs
-                        const jobsData = await getJobs(user.id);
+                        const jobsData = await getJobs({ employerId: user.id });
                         console.log("Jobs loaded in Dashboard:", jobsData.length);
                         setJobs(jobsData);
                     }
@@ -408,8 +442,7 @@ const EmployerDashboard: React.FC = () => {
 
     // Generate AI description and skills
     const handleGenerateAI = async () => {
-        const titleInput = document.getElementById('title') as HTMLInputElement;
-        const title = titleInput?.value;
+        const title = jobForm.title;
 
         if (!title || title.trim() === '') {
             alert('Please enter a job title first');
@@ -426,12 +459,12 @@ const EmployerDashboard: React.FC = () => {
             setAiDescription(aiDetails.description || '');
             setAiSkills(aiDetails.required_skills || []);
 
-            // Update the form fields
-            const descriptionField = document.getElementById('description') as HTMLTextAreaElement;
-            const skillsField = document.getElementById('required_skills') as HTMLInputElement;
-
-            if (descriptionField) descriptionField.value = aiDetails.description || '';
-            if (skillsField) skillsField.value = (aiDetails.required_skills || []).join(', ');
+            // Update the controlled form fields directly (no DOM reads/writes)
+            setJobForm(prev => ({
+                ...prev,
+                description: aiDetails.description || '',
+                required_skills: (aiDetails.required_skills || []).join(', '),
+            }));
 
         } catch (error) {
             console.error("Error generating AI content:", error);
@@ -447,22 +480,18 @@ const EmployerDashboard: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const formData = new FormData(e.currentTarget);
-            const title = formData.get('title') as string;
+            const title = jobForm.title;
             const company = employerProfile?.company_name || 'My Company';
-            const location = formData.get('location') as string;
-            const manualDescription = formData.get('description') as string;
-            const manualSkills = formData.get('required_skills') as string;
+            const location = jobForm.location;
+            const manualDescription = jobForm.description;
+            const manualSkills = jobForm.required_skills;
 
-            // Safe Parsing for Salary to avoid NaN errors in Firestore
-            const salaryMinInput = formData.get('salary_min');
-            const salaryMaxInput = formData.get('salary_max');
-
-            const salary_min = salaryMinInput ? parseInt(salaryMinInput as string, 10) : 0;
-            const salary_max = salaryMaxInput ? parseInt(salaryMaxInput as string, 10) : 0;
+            // Safe parsing for salary so we never send NaN to the DB.
+            const salary_min = jobForm.salary_min ? parseInt(jobForm.salary_min, 10) : 0;
+            const salary_max = jobForm.salary_max ? parseInt(jobForm.salary_max, 10) : 0;
 
             if (isNaN(salary_min) || isNaN(salary_max)) {
-                alert("Please enter valid numbers for salary.");
+                showToast("Please enter valid numbers for salary.", 'error');
                 setIsLoading(false);
                 return;
             }
@@ -512,10 +541,15 @@ const EmployerDashboard: React.FC = () => {
             console.log("Job created successfully");
 
             // Reset view to dashboard which triggers a reload
+            setJobForm(EMPTY_JOB_FORM);
             setView('DASHBOARD');
         } catch (error: any) {
             console.error("Error creating job:", error);
-            alert(`Failed to create job: ${error.message || 'Unknown error'}`);
+            // createJob throws a plain Error (e.g. "Maximum salary cannot be
+            // lower than minimum salary.") for both client- and DB-level
+            // validation — surface its message as-is instead of a raw
+            // exception dump.
+            showToast(error.message || 'Failed to create job. Please try again.', 'error');
             setIsLoading(false); // Stop loading if error keeps us on same page
         }
     };
@@ -526,36 +560,33 @@ const EmployerDashboard: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const formData = new FormData(e.currentTarget);
-            const salaryMinInput = formData.get('salary_min');
-            const salaryMaxInput = formData.get('salary_max');
-
-            const salary_min = salaryMinInput ? parseInt(salaryMinInput as string, 10) : 0;
-            const salary_max = salaryMaxInput ? parseInt(salaryMaxInput as string, 10) : 0;
+            const salary_min = jobForm.salary_min ? parseInt(jobForm.salary_min, 10) : 0;
+            const salary_max = jobForm.salary_max ? parseInt(jobForm.salary_max, 10) : 0;
 
             if (isNaN(salary_min) || isNaN(salary_max)) {
-                alert("Please enter valid numbers for salary.");
+                showToast("Please enter valid numbers for salary.", 'error');
                 setIsLoading(false);
                 return;
             }
 
             const updatedData: Partial<Job> = {
-                title: formData.get('title') as string,
-                location: formData.get('location') as string,
+                title: jobForm.title,
+                location: jobForm.location,
                 country: country,
                 salary_min,
                 salary_max,
                 currency: currency.code, // Add currency code
-                description: formData.get('description') as string,
-                required_skills: (formData.get('required_skills') as string).split(',').map(s => s.trim()).filter(Boolean),
+                description: jobForm.description,
+                required_skills: jobForm.required_skills.split(',').map(s => s.trim()).filter(Boolean),
             };
 
             await updateJob(selectedJob.id, updatedData);
             setSelectedJob(null);
+            setJobForm(EMPTY_JOB_FORM);
             setView('DASHBOARD'); // Triggers reload
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error updating job:", error);
-            alert("Failed to update job.");
+            showToast(error.message || 'Failed to update job. Please try again.', 'error');
             setIsLoading(false);
         }
     };
@@ -563,6 +594,14 @@ const EmployerDashboard: React.FC = () => {
     const handleStartEdit = (job: Job) => {
         setSelectedJob(job);
         setCountry(job.country); // Set country for the dropdown in edit form
+        setJobForm({
+            title: job.title,
+            location: job.location,
+            salary_min: String(job.salary_min ?? ''),
+            salary_max: String(job.salary_max ?? ''),
+            description: job.description,
+            required_skills: (job.required_skills ?? []).join(', '),
+        });
         setView('EDIT_JOB');
     };
 
@@ -570,20 +609,62 @@ const EmployerDashboard: React.FC = () => {
         setIsLoading(true);
         setView('APPLICANTS');
         setSelectedJob(job);
-        // Use real database applicants instead of AI generated ones
-        const fetchedApplicants = await getJobApplicants(job.id);
-        setWorkers(fetchedApplicants);
+        try {
+            const applicants = await getJobApplicants(job.id);
+            const meta = new Map<string, { applicationId: string; status: Application['status'] }>();
+            applicants.forEach((a) => {
+                meta.set(a.worker.user_id, { applicationId: a.applicationId, status: a.status });
+            });
+
+            setWorkers(applicants.map((a) => a.worker));
+            setApplicantMeta(meta);
+        } catch (e) {
+            console.error("Error fetching applicants:", e);
+            setWorkers([]);
+            setApplicantMeta(new Map());
+        }
         setIsLoading(false);
     }, []);
 
-    const searchAndRankWorkersForJob = useCallback(async (job: Job) => {
-        setIsLoading(true);
-        setView('SEARCH_WORKERS_FOR_JOB');
-        setSelectedJob(job);
-        const rankedWorkers = await generateRankedWorkersForJob(job.title, job.country);
-        setWorkers(rankedWorkers);
-        setIsLoading(false);
-    }, []);
+    const handleShortlist = async (worker: WorkerProfile) => {
+        const meta = applicantMeta.get(worker.user_id);
+        if (!meta) return;
+        if (!window.confirm(`Shortlist ${worker.full_name} for this position?`)) return;
+
+        setProcessingAction(worker.id);
+        try {
+            await updateApplicationStatus(meta.applicationId, 'Shortlisted');
+            setApplicantMeta(prev => new Map(prev).set(worker.user_id, { ...meta, status: 'Shortlisted' }));
+            showToast(`${worker.full_name} has been shortlisted! Check your shortlist to contact them.`, 'success');
+        } catch (error: any) {
+            console.error("Error shortlisting applicant:", error);
+            showToast(error.message || 'Failed to shortlist applicant. Please try again.', 'error');
+        } finally {
+            setProcessingAction(null);
+        }
+    };
+
+    const handleReject = async (worker: WorkerProfile) => {
+        const meta = applicantMeta.get(worker.user_id);
+        if (!meta) return;
+        if (!window.confirm(`Are you sure you want to reject ${worker.full_name}'s application?`)) return;
+
+        setProcessingAction(`reject-${worker.id}`);
+        try {
+            await updateApplicationStatus(meta.applicationId, 'Rejected');
+            showToast(`${worker.full_name}'s application has been rejected.`, 'error');
+            // Remove from the pipeline view with a brief delay, matching the
+            // previous animation-out behavior.
+            setTimeout(() => {
+                setWorkers(prev => prev.filter(w => w.id !== worker.id));
+            }, 500);
+        } catch (error: any) {
+            console.error("Error rejecting applicant:", error);
+            showToast(error.message || 'Failed to reject applicant. Please try again.', 'error');
+        } finally {
+            setProcessingAction(null);
+        }
+    };
 
     const handleStatusChange = async (jobId: string, newStatus: JobStatus) => {
         try {
@@ -630,8 +711,7 @@ const EmployerDashboard: React.FC = () => {
 
             let logoUrl = employerProfile?.company_logo_url;
             if (logoFile) {
-                // Upload to 'Company_Logo' folder (Underscores for safe paths)
-                logoUrl = await uploadFile(logoFile, `Company_Logo/${user.id}/${logoFile.name}`);
+                logoUrl = await uploadFile('employer-logos', user.id, logoFile);
             }
 
             // Automatically prepend https:// if missing
@@ -678,46 +758,42 @@ const EmployerDashboard: React.FC = () => {
         }
     };
 
+    const CSV_MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB cap on bulk job-import files
+
     const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setCsvFile(e.target.files[0]);
+            const file = e.target.files[0];
+            if (file.size > CSV_MAX_SIZE_BYTES) {
+                alert('CSV file is too large. Please keep it under 2MB.');
+                e.target.value = '';
+                return;
+            }
+            setCsvFile(file);
         }
     };
 
-    const parseCsvFile = (file: File): Promise<any[]> => {
+    // Real CSV parsing via papaparse — the old line.split(',') /
+    // line.split('\n') approach broke on any comma, quote, or embedded
+    // newline inside a field (e.g. a description containing a comma).
+    const parseCsvFile = (file: File): Promise<Record<string, string>[]> => {
         return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const text = e.target?.result as string;
-                    const lines = text.split('\n').filter(line => line.trim());
-
-                    if (lines.length < 2) {
+            Papa.parse<Record<string, string>>(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    if (results.errors.length > 0) {
+                        const first = results.errors[0];
+                        reject(new Error(`CSV parse error on row ${(first.row ?? 0) + 2}: ${first.message}`));
+                        return;
+                    }
+                    if (results.data.length === 0) {
                         reject(new Error('CSV file must contain at least a header row and one data row'));
                         return;
                     }
-
-                    const headers = lines[0].split(',').map(h => h.trim());
-                    const jobs = [];
-
-                    for (let i = 1; i < lines.length; i++) {
-                        const values = lines[i].split(',').map(v => v.trim());
-                        const job: any = {};
-
-                        headers.forEach((header, index) => {
-                            job[header] = values[index] || '';
-                        });
-
-                        jobs.push(job);
-                    }
-
-                    resolve(jobs);
-                } catch (error) {
-                    reject(error);
-                }
-            };
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsText(file);
+                    resolve(results.data);
+                },
+                error: (error: Error) => reject(error),
+            });
         });
     };
 
@@ -729,6 +805,11 @@ const EmployerDashboard: React.FC = () => {
 
         if (!user) {
             alert('You must be logged in to import jobs');
+            return;
+        }
+
+        if (csvFile.size > CSV_MAX_SIZE_BYTES) {
+            alert('CSV file is too large. Please keep it under 2MB.');
             return;
         }
 
@@ -808,7 +889,7 @@ const EmployerDashboard: React.FC = () => {
 
             // Reload jobs list
             if (successCount > 0) {
-                const jobsData = await getJobs(user.id);
+                const jobsData = await getJobs({ employerId: user.id });
                 setJobs(jobsData);
             }
 
@@ -960,7 +1041,6 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                     </div>
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <button onClick={() => fetchAndShowApplicants(job)} className="bg-emerald-100 text-emerald-800 text-sm font-bold py-2 px-3 rounded-md hover:bg-emerald-200 transition-colors">View Applicants</button>
-                                        <button onClick={() => searchAndRankWorkersForJob(job)} className="bg-gray-100 text-gray-800 text-sm font-bold py-2 px-3 rounded-md hover:bg-gray-200 transition-colors">Search Workers</button>
                                     </div>
                                 </div>
                                 <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1151,11 +1231,11 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                             <form onSubmit={isEditing ? handleUpdateJob : handleCreateJob} className="space-y-6">
                                 <div>
                                     <label htmlFor="title" className="block text-sm font-medium text-gray-700">Job Title</label>
-                                    <input type="text" name="title" id="title" required defaultValue={isEditing ? selectedJob?.title : ''} placeholder="e.g., Senior Plumber" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                    <input type="text" name="title" id="title" required value={jobForm.title} onChange={e => setJobForm({ ...jobForm, title: e.target.value })} placeholder="e.g., Senior Plumber" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
                                 </div>
                                 <div>
                                     <label htmlFor="location" className="block text-sm font-medium text-gray-700">Work Location</label>
-                                    <input type="text" name="location" id="location" required defaultValue={isEditing ? selectedJob?.location : ''} placeholder="e.g., San Francisco, CA" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                    <input type="text" name="location" id="location" required value={jobForm.location} onChange={e => setJobForm({ ...jobForm, location: e.target.value })} placeholder="e.g., San Francisco, CA" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
                                 </div>
                                 <CountryDropdown />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1163,13 +1243,13 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         <label htmlFor="salary_min" className="block text-sm font-medium text-gray-700">
                                             Minimum Salary (Annual) - {currency.symbol} {currency.code}
                                         </label>
-                                        <input type="number" name="salary_min" id="salary_min" required defaultValue={isEditing ? selectedJob?.salary_min : ''} placeholder={`e.g., 50000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <input type="number" name="salary_min" id="salary_min" required value={jobForm.salary_min} onChange={e => setJobForm({ ...jobForm, salary_min: e.target.value })} placeholder={`e.g., 50000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                     <div>
                                         <label htmlFor="salary_max" className="block text-sm font-medium text-gray-700">
                                             Maximum Salary (Annual) - {currency.symbol} {currency.code}
                                         </label>
-                                        <input type="number" name="salary_max" id="salary_max" required defaultValue={isEditing ? selectedJob?.salary_max : ''} placeholder={`e.g., 70000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <input type="number" name="salary_max" id="salary_max" required value={jobForm.salary_max} onChange={e => setJobForm({ ...jobForm, salary_max: e.target.value })} placeholder={`e.g., 70000`} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                 </div>
 
@@ -1209,7 +1289,8 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         name="description"
                                         id="description"
                                         rows={6}
-                                        defaultValue={isEditing ? selectedJob?.description : ''}
+                                        value={jobForm.description}
+                                        onChange={e => setJobForm({ ...jobForm, description: e.target.value })}
                                         placeholder="Enter job description or click 'Generate with AI' to auto-generate..."
                                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
                                     ></textarea>
@@ -1223,7 +1304,8 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         type="text"
                                         name="required_skills"
                                         id="required_skills"
-                                        defaultValue={isEditing ? selectedJob?.required_skills.join(', ') : ''}
+                                        value={jobForm.required_skills}
+                                        onChange={e => setJobForm({ ...jobForm, required_skills: e.target.value })}
                                         placeholder="e.g., Plumbing, Pipe Fitting, Blueprint Reading"
                                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
                                     />
@@ -1245,14 +1327,22 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                         <h2 className="text-2xl font-bold text-gray-900 mb-4">Applicants for {selectedJob?.title}</h2>
                         {isLoading ? (
                             <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Finding applicants...</p></div>
-                        ) : workers.length === 0 ? (<p className="text-gray-500">No applicants found for this job.</p>) : (
+        ) : workers.length === 0 ? (<p className="text-gray-500">No applicants found for this job.</p>) : (
                             <div>
                                 <div className="space-y-4">
-                                    {workers.map(app => (
+                                    {workers.map(app => {
+                                        const meta = applicantMeta.get(app.user_id);
+                                        const isShortlisted = meta?.status === 'Shortlisted';
+                                        return (
                                         <div key={app.id} className="bg-white p-4 rounded-lg shadow-md">
                                             <div className="flex items-start">
                                                 <div className="ml-4 flex-grow">
-                                                    <h3 className="font-bold text-lg">{app.full_name}</h3>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-bold text-lg">{app.full_name}</h3>
+                                                        {isShortlisted && (
+                                                            <span className="bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full">Shortlisted</span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-sm text-emerald-600 font-semibold">{app.trade_or_skill} - {app.experience_years} years total</p>
                                                     <p className="text-xs text-gray-500 mt-1">{app.summary}</p>
                                                     <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
@@ -1285,19 +1375,9 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                                     </a>
                                                 )}
                                                 <button
-                                                    onClick={async () => {
-                                                        const confirmed = window.confirm(`Shortlist ${app.full_name} for this position?`);
-                                                        if (confirmed) {
-                                                            setProcessingAction(app.id);
-                                                            // Simulate processing
-                                                            await new Promise(resolve => setTimeout(resolve, 800));
-                                                            setProcessingAction(null);
-                                                            showToast(`✅ ${app.full_name} has been shortlisted! Check your shortlist to contact them.`, 'success');
-                                                            // TODO: await updateApplicationStatus(applicationId, 'Shortlisted');
-                                                        }
-                                                    }}
-                                                    disabled={processingAction === app.id}
-                                                    className={`bg-emerald-100 text-emerald-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-emerald-200 transition-all duration-200 ${processingAction === app.id ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
+                                                    onClick={() => handleShortlist(app)}
+                                                    disabled={processingAction === app.id || isShortlisted}
+                                                    className={`bg-emerald-100 text-emerald-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-emerald-200 transition-all duration-200 disabled:opacity-50 ${processingAction === app.id ? 'cursor-not-allowed animate-pulse' : ''}`}
                                                 >
                                                     {processingAction === app.id ? (
                                                         <span className="flex items-center gap-1">
@@ -1307,23 +1387,10 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                                             </svg>
                                                             Processing...
                                                         </span>
-                                                    ) : 'Shortlist'}
+                                                    ) : isShortlisted ? 'Shortlisted' : 'Shortlist'}
                                                 </button>
                                                 <button
-                                                    onClick={async () => {
-                                                        if (window.confirm(`Are you sure you want to reject ${app.full_name}'s application?\n\nThis action will notify the applicant.`)) {
-                                                            setProcessingAction(`reject-${app.id}`);
-                                                            // Simulate processing
-                                                            await new Promise(resolve => setTimeout(resolve, 800));
-                                                            setProcessingAction(null);
-                                                            showToast(`❌ ${app.full_name}'s application has been rejected.`, 'error');
-                                                            // TODO: await updateApplicationStatus(applicationId, 'Rejected');
-                                                            // Remove from view with animation
-                                                            setTimeout(() => {
-                                                                setWorkers(prev => prev.filter(w => w.id !== app.id));
-                                                            }, 500);
-                                                        }
-                                                    }}
+                                                    onClick={() => handleReject(app)}
                                                     disabled={processingAction === `reject-${app.id}`}
                                                     className={`bg-red-100 text-red-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-red-200 transition-all duration-200 ${processingAction === `reject-${app.id}` ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
                                                 >
@@ -1339,47 +1406,8 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                                 </button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            case 'SEARCH_WORKERS_FOR_JOB':
-                return (
-                    <div>
-                        <button onClick={() => { setView('DASHBOARD'); setWorkers([]); }} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-1">Search for Workers</h2>
-                        <p className="text-gray-600 mb-4">AI-powered search for: <span className="font-semibold">{selectedJob?.title}</span></p>
-
-                        {isLoading ? (
-                            <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Our AI is searching and ranking candidates...</p></div>
-                        ) : workers.length === 0 ? (<p className="text-gray-500">Our AI couldn't find any matching workers at this time.</p>) : (
-                            <div>
-                                <div className="space-y-4">
-                                    {workers.map(worker => (
-                                        <div key={worker.id} className="bg-white p-4 rounded-lg shadow-md flex items-start">
-                                            <div className="flex-grow">
-                                                <h3 className="font-bold text-lg">{worker.full_name}</h3>
-                                                <p className="text-sm text-emerald-600 font-semibold">{worker.trade_or_skill} - {worker.experience_years} years total</p>
-                                                <p className="text-xs text-gray-500 mt-1">{worker.summary}</p>
-                                                <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                                                    <div className="flex items-center">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9V3m0 9a9 9 0 019-9" /></svg>
-                                                        <span className="ml-1.5">From: <span className="font-semibold text-gray-800">{worker.country_of_origin}</span></span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                                                        <span className="ml-1.5"><span className="font-semibold text-gray-800">{worker.experience_in_country} years</span> exp. in {selectedJob?.country}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col items-center justify-center ml-4 px-4">
-                                                <span className="text-xs text-gray-500">Match Score</span>
-                                                <span className="text-2xl font-bold text-emerald-600">{worker.composite_score || 'N/A'}</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -1408,8 +1436,8 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                     </svg>
                                     Import CSV
                                 </button>
-                                <button 
-                                    onClick={() => setView('NEW_JOB')} 
+                                <button
+                                    onClick={() => { setJobForm(EMPTY_JOB_FORM); setView('NEW_JOB'); }}
                                     className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs uppercase tracking-wider px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <span className="text-base font-bold leading-none">+</span>
@@ -1484,7 +1512,7 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                 </p>
                             </div>
                             <button
-                                onClick={() => setView('NEW_JOB')}
+                                onClick={() => { setJobForm(EMPTY_JOB_FORM); setView('NEW_JOB'); }}
                                 className="relative z-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider px-6 py-3.5 rounded-full font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-lg cursor-pointer"
                             >
                                 Launch Studio

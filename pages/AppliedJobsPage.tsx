@@ -1,22 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../firebaseConfig';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { getWorkerApplications, withdrawApplication } from '../services/db';
 import Spinner from '../components/Spinner';
-import { Trash2, Briefcase, MapPin, Calendar, Building2, FileText, Search, ArrowUpDown } from 'lucide-react';
+import { Trash2, Briefcase, MapPin, Calendar, Building2, Search, ArrowUpDown } from 'lucide-react';
+import type { Application } from '../types';
 
-interface Application {
-    id: string;
-    job_id: string; // Changed to match database schema
-    jobTitle: string;
-    companyName: string;
-    status: 'applied' | 'interviewing' | 'offered' | 'rejected' | 'accepted';
-    appliedDate: string;
-    notes?: string;
-    location?: string;
-    employer_id?: string;
-}
+const getStatusColor = (status: Application['status']) => {
+    switch (status) {
+        case 'Submitted': return 'bg-blue-100 text-blue-800';
+        case 'Viewed': return 'bg-yellow-100 text-yellow-800';
+        case 'Shortlisted': return 'bg-emerald-100 text-emerald-800';
+        case 'Rejected': return 'bg-red-100 text-red-800';
+        case 'Withdrawn': return 'bg-gray-100 text-gray-800';
+        default: return 'bg-gray-100 text-gray-800';
+    }
+};
 
 export default function AppliedJobsPage() {
     const { user } = useAuth();
@@ -24,12 +23,29 @@ export default function AppliedJobsPage() {
     const [applications, setApplications] = useState<Application[]>([]);
     const [filteredApplications, setFilteredApplications] = useState<Application[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+    const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+
+    const fetchApplications = useCallback(async () => {
+        if (!user) { setLoading(false); return; }
+        setLoading(true);
+        setError(null);
+        try {
+            const apps = await getWorkerApplications(user.id);
+            setApplications(apps);
+        } catch (err) {
+            console.error("Error fetching applications:", err);
+            setError("Couldn't load your applications. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
 
     useEffect(() => {
         fetchApplications();
-    }, [user]);
+    }, [fetchApplications]);
 
     // Filter and sort applications whenever they change or search/sort changes
     useEffect(() => {
@@ -37,54 +53,38 @@ export default function AppliedJobsPage() {
 
         // Apply search filter
         if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
             filtered = filtered.filter(app =>
-                app.jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                app.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                app.location?.toLowerCase().includes(searchTerm.toLowerCase())
+                app.job_title.toLowerCase().includes(lowerTerm) ||
+                app.employer_name.toLowerCase().includes(lowerTerm) ||
+                app.location?.toLowerCase().includes(lowerTerm)
             );
         }
 
         // Apply sorting
         filtered.sort((a, b) => {
-            const dateA = new Date(a.appliedDate).getTime();
-            const dateB = new Date(b.appliedDate).getTime();
+            const dateA = new Date(a.appliedAt).getTime();
+            const dateB = new Date(b.appliedAt).getTime();
             return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
         });
 
         setFilteredApplications(filtered);
     }, [applications, searchTerm, sortOrder]);
 
-    const fetchApplications = async () => {
-        if (!user) return;
-        console.log("Fetching applications for user ID:", user.id);
-        try {
-            const q = query(collection(db, 'applications'), where('worker_id', '==', user.id));
-            const querySnapshot = await getDocs(q);
-            const apps: Application[] = [];
-            querySnapshot.forEach((doc) => {
-                console.log("Found application:", doc.id, doc.data());
-                apps.push({ id: doc.id, ...doc.data() } as Application);
-            });
-            console.log("Total applications found:", apps.length);
-            setApplications(apps);
-        } catch (error) {
-            console.error("Error fetching applications:", error);
-        } finally {
-            setLoading(false);
+    const handleWithdraw = async (id: string) => {
+        if (!window.confirm("Are you sure you want to withdraw this application? You can re-apply later, but the employer will see it as withdrawn until then.")) {
+            return;
         }
-    };
 
-    const handleDelete = async (id: string) => {
-        // Temporarily removed confirmation for testing
-        // if (!window.confirm("Are you sure you want to withdraw this application?")) return;
-        console.log("Deleting application with ID:", id);
+        setWithdrawingId(id);
         try {
-            await deleteDoc(doc(db, 'applications', id));
-            setApplications(prev => prev.filter(app => app.id !== id));
-            alert("Application withdrawn successfully!");
+            await withdrawApplication(id);
+            setApplications(prev => prev.map(app => app.id === id ? { ...app, status: 'Withdrawn' } : app));
         } catch (error) {
-            console.error("Error deleting application:", error);
-            alert("Failed to delete application.");
+            console.error("Error withdrawing application:", error);
+            alert("Failed to withdraw application. Please try again.");
+        } finally {
+            setWithdrawingId(null);
         }
     };
 
@@ -95,17 +95,6 @@ export default function AppliedJobsPage() {
     const handleViewCompany = (employerId: string) => {
         if (employerId) {
             navigate(`/employer/profile/${employerId}`);
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'applied': return 'bg-blue-100 text-blue-800';
-            case 'interviewing': return 'bg-yellow-100 text-yellow-800';
-            case 'offered': return 'bg-green-100 text-green-800';
-            case 'accepted': return 'bg-emerald-100 text-emerald-800';
-            case 'rejected': return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
         }
     };
 
@@ -150,7 +139,17 @@ export default function AppliedJobsPage() {
                 )}
             </div>
 
-            {filteredApplications.length === 0 ? (
+            {error ? (
+                <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-slate-200">
+                    <h3 className="text-lg font-medium text-red-600 mb-2">{error}</h3>
+                    <button
+                        onClick={fetchApplications}
+                        className="mt-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    >
+                        Retry
+                    </button>
+                </div>
+            ) : filteredApplications.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-slate-200">
                     <Briefcase size={48} className="mx-auto text-slate-300 mb-4" />
                     <h3 className="text-lg font-medium text-slate-900">
@@ -172,7 +171,7 @@ export default function AppliedJobsPage() {
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex-1">
                                         <h3 className="text-xl font-bold text-slate-800 hover:text-emerald-600 transition-colors">
-                                            {app.jobTitle}
+                                            {app.job_title}
                                         </h3>
                                         <button
                                             onClick={(e) => {
@@ -182,7 +181,7 @@ export default function AppliedJobsPage() {
                                             className="text-slate-600 font-medium hover:text-emerald-600 transition-colors text-left mt-1 flex items-center gap-1"
                                         >
                                             <Building2 size={14} />
-                                            {app.companyName}
+                                            {app.employer_name}
                                         </button>
                                     </div>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${getStatusColor(app.status)}`}>
@@ -193,7 +192,7 @@ export default function AppliedJobsPage() {
                                 <div className="space-y-2 text-sm text-slate-500">
                                     <div className="flex items-center gap-2">
                                         <Calendar size={16} />
-                                        <span>Applied: {app.appliedDate}</span>
+                                        <span>Applied: {new Date(app.appliedAt).toLocaleDateString()}</span>
                                     </div>
                                     {app.location && (
                                         <div className="flex items-center gap-2">
@@ -202,27 +201,23 @@ export default function AppliedJobsPage() {
                                         </div>
                                     )}
                                 </div>
-
-                                {app.notes && (
-                                    <div className="mt-4 bg-slate-50 p-3 rounded-lg text-slate-600 text-sm italic border border-slate-200">
-                                        <FileText size={14} className="inline mr-1" />
-                                        "{app.notes}"
-                                    </div>
-                                )}
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="px-6 pb-6">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDelete(app.id);
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-                                >
-                                    <Trash2 size={16} /> Withdraw Application
-                                </button>
-                            </div>
+                            {app.status !== 'Withdrawn' && (
+                                <div className="px-6 pb-6">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleWithdraw(app.id);
+                                        }}
+                                        disabled={withdrawingId === app.id}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Trash2 size={16} /> {withdrawingId === app.id ? 'Withdrawing...' : 'Withdraw Application'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>

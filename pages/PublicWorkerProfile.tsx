@@ -1,13 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getWorkerProfile, getSubcollectionData } from '../services/db';
+import { getWorkerProfile, getWorkerProjects, getWorkerCertifications, getWorkerReferences } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types';
+import { migrateLegacySkills } from '../utils/workerSkills';
 import PassportLayout from '../components/profile/PassportLayout';
 import Spinner from '../components/Spinner';
 import { ArrowLeft } from 'lucide-react';
-import type { WorkerProfile, Project, Certification, Reference, UserSkill } from '../types';
+import type { WorkerProfile, Project, Certification, Reference } from '../types';
 
 export default function PublicWorkerProfile() {
     const { id } = useParams<{ id: string }>();
@@ -20,51 +21,56 @@ export default function PublicWorkerProfile() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        const loadData = async () => {
-            if (!id) return;
-            try {
-                const profileData = await getWorkerProfile(id);
-                if (profileData) {
-                    // Legacy Migration: If 'skills' array is missing/empty but 'trade_or_skill' exists, create the array
-                    let loadedSkills: UserSkill[] = profileData.skills || [];
-                    if (loadedSkills.length === 0 && profileData.trade_or_skill) {
-                        loadedSkills = [{
-                            trade: profileData.trade_or_skill,
-                            tags: profileData.trade_specifics || {},
-                            isPrimary: true
-                        }];
-                    }
+    const loadData = useCallback(async () => {
+        if (!id) return;
+        setLoading(true);
+        setError('');
+        try {
+            const profileData = await getWorkerProfile(id);
+            if (profileData) {
+                const loadedSkills = migrateLegacySkills(profileData);
 
-                    setProfile({
-                        ...profileData,
-                        skills: loadedSkills,
-                        physical_attributes: { ...profileData.physical_attributes },
-                        media_links: { ...profileData.media_links },
-                        trade_specifics: profileData.trade_specifics || {}
-                    });
+                setProfile({
+                    ...profileData,
+                    skills: loadedSkills,
+                    physical_attributes: { ...profileData.physical_attributes },
+                    media_links: { ...profileData.media_links },
+                    trade_specifics: profileData.trade_specifics || {}
+                });
 
-                    // Load subcollections
-                    const [p, c, r] = await Promise.all([
-                        getSubcollectionData(id, 'projects'),
-                        getSubcollectionData(id, 'certifications'),
-                        getSubcollectionData(id, 'references')
-                    ]);
-                    setProjects(p as Project[]);
-                    setCerts(c as Certification[]);
-                    setReferences(r as Reference[]);
-                } else {
-                    setError('Worker profile not found.');
+                // Each sub-resource is fetched independently so a failure in
+                // one (e.g. a transient permissions/network hiccup) doesn't
+                // blank out the whole profile — the passport still renders
+                // with whatever loaded successfully.
+                try {
+                    setProjects(await getWorkerProjects(profileData.id));
+                } catch (e) {
+                    console.warn("Could not load projects:", e);
                 }
-            } catch (e) {
-                console.error("Error loading public profile:", e);
-                setError('Failed to load profile.');
-            } finally {
-                setLoading(false);
+                try {
+                    setCerts(await getWorkerCertifications(profileData.id));
+                } catch (e) {
+                    console.warn("Could not load certifications:", e);
+                }
+                try {
+                    setReferences(await getWorkerReferences(profileData.id));
+                } catch (e) {
+                    console.warn("Could not load references:", e);
+                }
+            } else {
+                setError('Worker profile not found.');
             }
-        };
-        loadData();
+        } catch (e) {
+            console.error("Error loading public profile:", e);
+            setError('Failed to load profile.');
+        } finally {
+            setLoading(false);
+        }
     }, [id]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     if (loading) return <div className="flex justify-center items-center min-h-screen"><Spinner size="lg" /></div>;
     if (error || !profile) return <div className="text-center py-20 text-slate-500">{error || 'Profile not found'}</div>;

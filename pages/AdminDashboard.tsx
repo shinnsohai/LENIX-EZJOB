@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkerProfile, EmployerProfile, BlogPost } from '../types';
 import { useSiteContent } from '../contexts/SiteContentContext';
-import { getAllWorkers, getAllEmployers, saveWorkerProfile, saveEmployerProfile, uploadFile } from '../services/db';
+import { useAuth } from '../contexts/AuthContext';
+import { getAllWorkers, getAllEmployers, saveWorkerProfile, saveEmployerProfile, deleteUserAccount, uploadFile } from '../services/db';
 import type { HomepageContent, SiteAssets, Testimonial, FAQ, AboutPageContent, ContactPageContent, CareersPageContent } from '../contexts/SiteContentContext';
+import Spinner from '../components/Spinner';
 
 
 type AdminView = 'DASHBOARD' | 'FRONTPAGE_CONTENT' | 'QUICK_LINKS' | 'LEGAL_PAGES' | 'SITE_ASSETS' | 'WORKER_MANAGEMENT' | 'EMPLOYER_MANAGEMENT' | 'BLOG_MANAGEMENT';
 type ModalMode = 'CREATE' | 'EDIT' | 'VIEW';
 
 const SiteAssetsManager: React.FC = () => {
+    const { user } = useAuth();
     const { siteAssets, updateSiteAssets } = useSiteContent();
     const [tempAssets, setTempAssets] = useState<SiteAssets>(siteAssets);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -44,6 +47,12 @@ const SiteAssetsManager: React.FC = () => {
         console.log('Pending files:', pendingFiles);
         console.log('Current tempAssets:', tempAssets);
 
+        if (!user?.id) {
+            alert('Cannot upload: no authenticated admin session.');
+            setIsUploading(false);
+            return;
+        }
+
         setIsUploading(true);
         try {
             const updatedAssets = { ...tempAssets };
@@ -51,7 +60,7 @@ const SiteAssetsManager: React.FC = () => {
             // Upload logo if there's a pending file
             if (pendingFiles.logoFile) {
                 console.log('Uploading logo file:', pendingFiles.logoFile.name);
-                const logoUrl = await uploadFile(pendingFiles.logoFile, `site-assets/logo-${Date.now()}`);
+                const logoUrl = await uploadFile('site-assets', user.id, pendingFiles.logoFile);
                 console.log('Logo uploaded successfully. URL:', logoUrl);
                 updatedAssets.logoUrl = logoUrl;
             }
@@ -59,16 +68,16 @@ const SiteAssetsManager: React.FC = () => {
             // Upload hero background if there's a pending file
             if (pendingFiles.heroFile) {
                 console.log('Uploading hero background file:', pendingFiles.heroFile.name);
-                const heroUrl = await uploadFile(pendingFiles.heroFile, `site-assets/hero-${Date.now()}`);
+                const heroUrl = await uploadFile('site-assets', user.id, pendingFiles.heroFile);
                 console.log('Hero background uploaded successfully. URL:', heroUrl);
                 updatedAssets.heroBackgroundUrl = heroUrl;
             }
 
             console.log('Final updatedAssets to save:', updatedAssets);
 
-            // Save to Firestore with permanent URLs
+            // Save to the DB with permanent URLs
             await updateSiteAssets(updatedAssets);
-            console.log('Assets saved to Firestore successfully');
+            console.log('Assets saved successfully');
 
             setTempAssets(updatedAssets);
             setPendingFiles({});
@@ -82,18 +91,26 @@ const SiteAssetsManager: React.FC = () => {
         }
     };
 
-    const handleDelete = (assetType: 'logoUrl' | 'heroBackgroundUrl') => {
-        if (window.confirm(`Are you sure you want to delete this ${assetType === 'logoUrl' ? 'logo' : 'hero background'}?`)) {
-            setTempAssets(prev => ({ ...prev, [assetType]: '' }));
-            // Clear pending file if any
-            if (assetType === 'logoUrl') {
-                setPendingFiles(prev => ({ ...prev, logoFile: undefined }));
-            } else {
-                setPendingFiles(prev => ({ ...prev, heroFile: undefined }));
-            }
-            // Immediately save the deletion
-            const updatedAssets = { ...tempAssets, [assetType]: '' };
-            updateSiteAssets(updatedAssets);
+    const handleDelete = async (assetType: 'logoUrl' | 'heroBackgroundUrl') => {
+        if (!window.confirm(`Are you sure you want to delete this ${assetType === 'logoUrl' ? 'logo' : 'hero background'}?`)) {
+            return;
+        }
+        setTempAssets(prev => ({ ...prev, [assetType]: '' }));
+        // Clear pending file if any
+        if (assetType === 'logoUrl') {
+            setPendingFiles(prev => ({ ...prev, logoFile: undefined }));
+        } else {
+            setPendingFiles(prev => ({ ...prev, heroFile: undefined }));
+        }
+        // Immediately save the deletion
+        const updatedAssets = { ...tempAssets, [assetType]: '' };
+        try {
+            await updateSiteAssets(updatedAssets);
+        } catch (error) {
+            console.error('Error deleting asset:', error);
+            alert(`Failed to delete asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            // Revert local preview since the deletion did not persist.
+            setTempAssets(prev => ({ ...prev, [assetType]: tempAssets[assetType] }));
         }
     };
 
@@ -477,39 +494,342 @@ const QuickLinksAndPagesManager: React.FC = () => {
 };
 
 
+// ---------------------------------------------------------------------------
+// Shared, fully-controlled form fields for AdminRecordModal. Hoisted to
+// module scope (like every other manager here) so they keep a stable
+// component identity across re-renders.
+// ---------------------------------------------------------------------------
+
+const FormInput: React.FC<{
+    label: string;
+    name: string;
+    value: string | number | undefined;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    type?: string;
+    readOnly?: boolean;
+}> = ({ label, name, value, onChange, type = "text", readOnly = false }) => (
+    <div>
+        <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
+        {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm break-words">{value || '-'}</p> :
+            <input
+                type={type}
+                name={name}
+                value={value ?? ''}
+                onChange={onChange}
+                className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500"
+            />}
+    </div>
+);
+
+const FormTextarea: React.FC<{
+    label: string;
+    name: string;
+    value: string | undefined;
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    readOnly?: boolean;
+    rows?: number;
+}> = ({ label, name, value, onChange, readOnly = false, rows = 4 }) => (
+    <div className="md:col-span-2">
+        <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
+        {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm whitespace-pre-wrap">{value || '-'}</p> :
+            <textarea
+                name={name}
+                value={value ?? ''}
+                onChange={onChange}
+                rows={rows}
+                className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500"
+            />}
+    </div>
+);
+
+const FormSelect: React.FC<{
+    label: string;
+    name: string;
+    value: string | undefined;
+    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    options: string[];
+    readOnly?: boolean;
+}> = ({ label, name, value, onChange, options, readOnly = false }) => (
+    <div>
+        <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
+        {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm">{value || '-'}</p> :
+            <select name={name} value={value ?? ''} onChange={onChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 bg-white rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500">
+                <option value="" disabled>Select...</option>
+                {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>}
+    </div>
+);
+
+const FormFileInput: React.FC<{
+    label: string;
+    name: string;
+    value: string | undefined;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    readOnly?: boolean;
+    accept?: string;
+    disabled?: boolean;
+}> = ({ label, name, value, onChange, readOnly, accept, disabled }) => {
+    const isImage = name.includes('photo') || name.includes('logo') || name.includes('image');
+
+    if (readOnly) {
+        return (
+            <div>
+                <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
+                <div className="mt-1">
+                    {value ? (
+                        isImage ? (
+                            <img src={value} alt={label} className="h-20 w-auto object-cover rounded-xl border border-slate-200" />
+                        ) : (
+                            <a href={value} target="_blank" rel="noopener noreferrer" className="text-cyan-600 font-mono text-xs hover:underline">View File</a>
+                        )
+                    ) : (
+                        <p className="text-slate-400 text-xs italic">No file attached</p>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div>
+            <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
+            {value && (
+                isImage ? (
+                    <img src={value} alt={label} className="h-16 w-auto object-cover rounded-lg border border-slate-200 mb-2" />
+                ) : (
+                    <a href={value} target="_blank" rel="noopener noreferrer" className="block text-cyan-600 font-mono text-xs hover:underline mb-2">Current file</a>
+                )
+            )}
+            <input
+                type="file"
+                name={name}
+                accept={accept}
+                disabled={disabled}
+                onChange={onChange}
+                className="mt-1 block w-full text-xs font-mono text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer disabled:opacity-50"
+            />
+        </div>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// The Worker/Employer/Blog create-edit-view modal. Hoisted to module scope
+// (finding #22) so it has a stable component identity across AdminDashboard
+// re-renders and no longer loses in-progress form state; its own form state
+// resets only when the record being edited (or open/closed state) actually
+// changes, via the effect below.
+// ---------------------------------------------------------------------------
+
+interface AdminRecordModalProps {
+    isOpen: boolean;
+    mode: ModalMode;
+    userType: 'worker' | 'employer' | 'blog' | null;
+    currentUser: WorkerProfile | EmployerProfile | BlogPost | null;
+    /** The logged-in admin's own profile id — used as the storage-path owner id for blog image uploads (blog posts have no end-user owner of their own). */
+    adminId: string | undefined;
+    onClose: () => void;
+    onSave: (data: Partial<WorkerProfile & EmployerProfile & BlogPost>) => void | Promise<void>;
+}
+
+const AdminRecordModal: React.FC<AdminRecordModalProps> = ({ isOpen, mode, userType, currentUser, adminId, onClose, onSave }) => {
+    const [formData, setFormData] = useState<Partial<WorkerProfile & EmployerProfile & BlogPost>>(currentUser || {});
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setFormData(currentUser || {});
+        setUploadError(null);
+    }, [currentUser, isOpen]);
+
+    if (!isOpen) return null;
+
+    const titleText = `${mode === 'CREATE' ? 'Create' : mode === 'EDIT' ? 'Edit' : 'View'} ${userType === 'worker' ? 'Worker' : userType === 'employer' ? 'Employer' : 'Blog Post'}`;
+    const isViewMode = mode === 'VIEW';
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Uploads straight to Supabase Storage and stores the returned public URL
+    // (never a blob: URL) — finding #20.
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || !files[0]) return;
+        const file = files[0];
+        const fieldName = userType === 'blog' ? 'imageUrl' : e.target.name;
+
+        const bucket = userType === 'blog'
+            ? 'blog-images'
+            : userType === 'worker'
+                ? (fieldName === 'cv_url' ? 'worker-cvs' : 'worker-photos')
+                : 'employer-logos';
+
+        // Worker/employer uploads are owned by that record's own user_id;
+        // blog images have no end-user owner, so they're filed under the
+        // uploading admin's own id.
+        const uid = userType === 'blog' ? adminId : (formData as Partial<WorkerProfile & EmployerProfile>).user_id;
+        if (!uid) {
+            setUploadError('Cannot upload: missing owner id for this record.');
+            e.target.value = '';
+            return;
+        }
+
+        setIsUploading(true);
+        setUploadError(null);
+        try {
+            const url = await uploadFile(bucket, uid, file);
+            setFormData(prev => ({ ...prev, [fieldName]: url }));
+        } catch (err) {
+            console.error('Upload failed:', err);
+            setUploadError(err instanceof Error ? err.message : 'Upload failed.');
+        } finally {
+            setIsUploading(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(formData);
+    };
+
+    const renderWorkerFields = () => {
+        const data = formData as Partial<WorkerProfile>;
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormInput label="Full Name" name="full_name" value={data.full_name} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Trade / Skill" name="trade_or_skill" value={data.trade_or_skill} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Experience (Years)" name="experience_years" value={data.experience_years} onChange={handleChange} type="number" readOnly={isViewMode} />
+                <FormInput label="Country of Origin" name="country_of_origin" value={data.country_of_origin} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Experience in Country (Years)" name="experience_in_country" value={data.experience_in_country} onChange={handleChange} type="number" readOnly={isViewMode} />
+                <FormSelect label="Status" name="status" value={data.status} onChange={handleChange} options={['Active', 'Suspended']} readOnly={isViewMode} />
+                <FormFileInput label="Photo" name="photo_url" value={data.photo_url} onChange={handleFileChange} readOnly={isViewMode} accept="image/*" disabled={isUploading} />
+                <FormFileInput label="CV Document" name="cv_url" value={data.cv_url} onChange={handleFileChange} readOnly={isViewMode} disabled={isUploading} />
+                <FormTextarea label="Professional Summary" name="summary" value={data.summary} onChange={handleChange} readOnly={isViewMode} />
+            </div>
+        );
+    };
+
+    const renderEmployerFields = () => {
+        const data = formData as Partial<EmployerProfile>;
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormInput label="Company Name" name="company_name" value={data.company_name} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Industry" name="industry" value={data.industry} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Website URL" name="website_url" value={data.website_url} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Phone" name="phone" value={data.phone} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Company Size" name="company_size" value={data.company_size} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Year Founded" name="year_founded" value={data.year_founded} onChange={handleChange} type="number" readOnly={isViewMode} />
+                <FormSelect label="Status" name="status" value={data.status} onChange={handleChange} options={['Active', 'Suspended']} readOnly={isViewMode} />
+                <FormFileInput label="Company Logo" name="company_logo_url" value={data.company_logo_url} onChange={handleFileChange} readOnly={isViewMode} accept="image/*" disabled={isUploading} />
+                <FormTextarea label="Company Description" name="description" value={data.description} onChange={handleChange} readOnly={isViewMode} />
+            </div>
+        );
+    };
+
+    const renderBlogFields = () => {
+        const data = formData as Partial<BlogPost>;
+        return (
+            <div className="grid grid-cols-1 gap-4">
+                <FormInput label="Post Title" name="title" value={data.title} onChange={handleChange} readOnly={isViewMode} />
+                <FormInput label="Author" name="author" value={data.author} onChange={handleChange} readOnly={isViewMode} />
+                <FormFileInput label="Illustration Photo" name="imageUrl" value={data.imageUrl} onChange={handleFileChange} readOnly={isViewMode} accept="image/*" disabled={isUploading} />
+                <FormTextarea label="Content" name="content" value={data.content} onChange={handleChange} readOnly={isViewMode} rows={10} />
+            </div>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-slate-200">
+                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                    <h2 className="text-xl font-extrabold text-slate-900">{titleText}</h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div className="space-y-6">
+                        {userType === 'worker' && renderWorkerFields()}
+                        {userType === 'employer' && renderEmployerFields()}
+                        {userType === 'blog' && renderBlogFields()}
+                    </div>
+                    {uploadError && <p className="mt-4 text-xs font-mono text-red-600">{uploadError}</p>}
+                    {isUploading && <p className="mt-4 text-xs font-mono text-cyan-600">Uploading file...</p>}
+                    <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-slate-100 font-mono text-xs">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">Close</button>
+                        {!isViewMode && <button type="submit" disabled={isUploading} className="px-6 py-2.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold transition-all shadow-md disabled:opacity-50">Save Changes</button>}
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const USER_PAGE_SIZE = 25;
+
 const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
+    const { user: adminUser } = useAuth();
     const [view, setView] = useState<AdminView>('DASHBOARD');
     const [workers, setWorkers] = useState<WorkerProfile[]>([]);
     const [employers, setEmployers] = useState<EmployerProfile[]>([]);
+    const [totalWorkers, setTotalWorkers] = useState(0);
+    const [totalEmployers, setTotalEmployers] = useState(0);
+    const [usersLoading, setUsersLoading] = useState(false);
+    const [usersError, setUsersError] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
 
     // Use global state for quick links, legal pages and blog posts
     const {
         legalPagesContent,
         blogPosts,
         updateLegalPagesContent,
-        updateBlogPosts
+        saveBlogPost,
+        deleteBlogPost,
     } = useSiteContent();
-
-    // Load initial data
-    useEffect(() => {
-        const loadUsers = async () => {
-            const w = await getAllWorkers();
-            setWorkers(w);
-            const e = await getAllEmployers();
-            setEmployers(e);
-        };
-        if (view === 'WORKER_MANAGEMENT' || view === 'EMPLOYER_MANAGEMENT') {
-            loadUsers();
-        }
-    }, [view]);
 
     // User management state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<ModalMode>('VIEW');
     const [currentUser, setCurrentUser] = useState<WorkerProfile | EmployerProfile | BlogPost | null>(null);
     const [userType, setUserType] = useState<'worker' | 'employer' | 'blog' | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    // Debounce the search box so we don't hit the backend on every keystroke.
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 350);
+        return () => clearTimeout(t);
+    }, [searchInput]);
+
+    // Reset to page 1 whenever the search term or the active table changes.
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch, view]);
+
+    const loadUsers = useCallback(async () => {
+        if (view !== 'WORKER_MANAGEMENT' && view !== 'EMPLOYER_MANAGEMENT') return;
+        setUsersLoading(true);
+        setUsersError(null);
+        try {
+            if (view === 'WORKER_MANAGEMENT') {
+                const { workers: w, total } = await getAllWorkers({ page, pageSize: USER_PAGE_SIZE, search: debouncedSearch || undefined });
+                setWorkers(w);
+                setTotalWorkers(total);
+            } else {
+                const { employers: e, total } = await getAllEmployers({ page, pageSize: USER_PAGE_SIZE, search: debouncedSearch || undefined });
+                setEmployers(e);
+                setTotalEmployers(total);
+            }
+        } catch (err) {
+            console.error('Failed to load users:', err);
+            setUsersError(err instanceof Error ? err.message : 'Failed to load data.');
+        } finally {
+            setUsersLoading(false);
+        }
+    }, [view, page, debouncedSearch]);
+
+    useEffect(() => { loadUsers(); }, [loadUsers]);
 
     const handleLogout = () => {
         sessionStorage.removeItem('isAdmin');
@@ -523,104 +843,102 @@ const AdminDashboard: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleUserSearch = (e: React.ChangeEvent<HTMLInputElement>, type: 'worker' | 'employer' | 'blog') => {
-        const term = e.target.value.toLowerCase();
-        setSearchTerm(term);
-        // Note: For better scaling, perform search on backend. Here we filter locally for simplicity.
-    };
-
-    const filteredWorkers = workers.filter(w => w.full_name.toLowerCase().includes(searchTerm) || w.trade_or_skill.toLowerCase().includes(searchTerm));
-    const filteredEmployers = employers.filter(e => e.company_name.toLowerCase().includes(searchTerm) || (e.industry && e.industry.toLowerCase().includes(searchTerm)));
-
     const handleSave = async (data: Partial<WorkerProfile & EmployerProfile & BlogPost>) => {
         try {
             if (userType === 'worker') {
+                const existing = currentUser as WorkerProfile | null;
                 const user = data as Partial<WorkerProfile>;
-                const id = user.id || crypto.randomUUID();
-                const newWorker: WorkerProfile = {
-                    id: id,
-                    user_id: user.user_id || id, // In admin create, user_id matches id usually
-                    full_name: user.full_name || '',
-                    trade_or_skill: user.trade_or_skill || '',
-                    experience_years: Number(user.experience_years) || 0,
-                    summary: user.summary,
-                    country_of_origin: user.country_of_origin || '',
-                    experience_in_country: Number(user.experience_in_country) || 0,
-                    photo_url: user.photo_url,
-                    cv_url: user.cv_url,
-                    status: user.status as 'Active' | 'Suspended' || 'Active',
+                if (!existing?.id || !existing?.user_id) {
+                    throw new Error('Missing worker record — cannot save.');
+                }
+                const updatedWorker: WorkerProfile = {
+                    ...existing,
+                    ...user,
+                    id: existing.id,
+                    user_id: existing.user_id,
+                    full_name: user.full_name ?? existing.full_name ?? '',
+                    trade_or_skill: user.trade_or_skill ?? existing.trade_or_skill ?? '',
+                    experience_years: Number(user.experience_years ?? existing.experience_years) || 0,
+                    country_of_origin: user.country_of_origin ?? existing.country_of_origin ?? '',
+                    experience_in_country: Number(user.experience_in_country ?? existing.experience_in_country) || 0,
+                    status: (user.status as 'Active' | 'Suspended') || existing.status || 'Active',
                 };
-                await saveWorkerProfile(newWorker);
-                setWorkers(prev => {
-                    const exists = prev.find(p => p.id === newWorker.id);
-                    return exists ? prev.map(p => p.id === newWorker.id ? newWorker : p) : [...prev, newWorker];
-                });
+                await saveWorkerProfile(updatedWorker);
+                await loadUsers();
             } else if (userType === 'employer') {
+                const existing = currentUser as EmployerProfile | null;
                 const user = data as Partial<EmployerProfile>;
-                const id = user.id || crypto.randomUUID();
-                const newEmployer: EmployerProfile = {
-                    id: id,
-                    user_id: user.user_id || id,
-                    company_name: user.company_name || '',
-                    description: user.description,
-                    website_url: user.website_url,
-                    phone: user.phone,
-                    industry: user.industry,
-                    company_size: user.company_size,
-                    year_founded: user.year_founded ? Number(user.year_founded) : undefined,
-                    company_logo_url: user.company_logo_url,
-                    status: user.status as 'Active' | 'Suspended' || 'Active',
+                if (!existing?.id || !existing?.user_id) {
+                    throw new Error('Missing employer record — cannot save.');
+                }
+                const updatedEmployer: EmployerProfile = {
+                    ...existing,
+                    ...user,
+                    id: existing.id,
+                    user_id: existing.user_id,
+                    company_name: user.company_name ?? existing.company_name ?? '',
+                    year_founded: user.year_founded ? Number(user.year_founded) : existing.year_founded,
+                    status: (user.status as 'Active' | 'Suspended') || existing.status || 'Active',
                 };
-                await saveEmployerProfile(newEmployer);
-                setEmployers(prev => {
-                    const exists = prev.find(p => p.id === newEmployer.id);
-                    return exists ? prev.map(p => p.id === newEmployer.id ? newEmployer : p) : [...prev, newEmployer];
-                });
+                await saveEmployerProfile(updatedEmployer);
+                await loadUsers();
             } else if (userType === 'blog') {
-                const post = data as Partial<BlogPost>;
-                const newPosts =
-                    modalMode === 'CREATE'
-                        ? [...blogPosts, { ...post, id: crypto.randomUUID(), publishDate: new Date().toISOString() } as BlogPost]
-                        : blogPosts.map((p) => (p.id === post.id ? ({ ...p, ...post } as BlogPost) : p));
-                await updateBlogPosts(newPosts);
+                const post = data as Partial<BlogPost> & { id?: string };
+                await saveBlogPost(modalMode === 'CREATE' ? { ...post, id: undefined } : post);
             }
             setIsModalOpen(false);
         } catch (e) {
             console.error("Admin Save Error", e);
-            alert("Failed to save");
+            alert(e instanceof Error ? e.message : 'Failed to save');
         }
     };
 
-    const handleDelete = async (id: string, type: 'worker' | 'employer' | 'blog') => {
-        if (window.confirm(`Are you sure you want to delete this ${type}? This cannot be undone.`)) {
-            // In a real app, call delete API. Here we just update local state for viewing
+    const handleDelete = async (item: WorkerProfile | EmployerProfile | BlogPost, type: 'worker' | 'employer' | 'blog') => {
+        if (type === 'blog') {
+            const post = item as BlogPost;
+            if (!window.confirm(`Delete the blog post "${post.title}"? This cannot be undone.`)) return;
+            try {
+                await deleteBlogPost(post.id);
+            } catch (e) {
+                console.error('Admin Delete Error', e);
+                alert(e instanceof Error ? e.message : 'Failed to delete.');
+            }
+            return;
+        }
+
+        const label = type === 'worker' ? (item as WorkerProfile).full_name : (item as EmployerProfile).company_name;
+        if (!window.confirm(`Permanently delete this ${type}'s account (${label})? This removes their login and all associated data and cannot be undone.`)) {
+            return;
+        }
+        const userId = type === 'worker' ? (item as WorkerProfile).user_id : (item as EmployerProfile).user_id;
+        if (!userId) {
+            alert('Cannot delete: missing linked user id.');
+            return;
+        }
+        try {
+            await deleteUserAccount(userId);
+            await loadUsers();
+        } catch (e) {
+            console.error('Admin Delete Error', e);
+            alert(e instanceof Error ? e.message : 'Failed to delete.');
+        }
+    };
+
+    const handleUserSuspend = async (item: WorkerProfile | EmployerProfile, type: 'worker' | 'employer') => {
+        const action = item.status === 'Active' ? 'suspend' : 'reactivate';
+        const label = type === 'worker' ? (item as WorkerProfile).full_name : (item as EmployerProfile).company_name;
+        if (!window.confirm(`Are you sure you want to ${action} ${label}?`)) return;
+        const newStatus = item.status === 'Active' ? 'Suspended' : 'Active';
+        try {
             if (type === 'worker') {
-                setWorkers(prev => prev.filter(w => w.id !== id));
-                // await deleteWorker(id); 
-            } else if (type === 'employer') {
-                setEmployers(prev => prev.filter(e => e.id !== id));
-            } else if (type === 'blog') {
-                await updateBlogPosts(blogPosts.filter(p => p.id !== id));
+                await saveWorkerProfile({ ...(item as WorkerProfile), status: newStatus });
+            } else {
+                await saveEmployerProfile({ ...(item as EmployerProfile), status: newStatus });
             }
-        }
-    };
-
-    const handleUserSuspend = async (id: string, type: 'worker' | 'employer') => {
-        const action = (user: WorkerProfile | EmployerProfile) => user.status === 'Active' ? 'suspend' : 'reactivate';
-        if (type === 'worker') {
-            const worker = workers.find(w => w.id === id);
-            if (worker && window.confirm(`Are you sure you want to ${action(worker)} ${worker.full_name}?`)) {
-                const newStatus = worker.status === 'Active' ? 'Suspended' : 'Active';
-                await saveWorkerProfile({ ...worker, status: newStatus });
-                setWorkers(prev => prev.map(w => w.id === id ? { ...w, status: newStatus } : w));
-            }
-        } else {
-            const employer = employers.find(e => e.id === id);
-            if (employer && window.confirm(`Are you sure you want to ${action(employer)} ${employer.company_name}?`)) {
-                const newStatus = employer.status === 'Active' ? 'Suspended' : 'Active';
-                await saveEmployerProfile({ ...employer, status: newStatus });
-                setEmployers(prev => prev.map(e => e.id === id ? { ...e, status: newStatus } : e));
-            }
+            await loadUsers();
+        } catch (e) {
+            console.error('Admin Suspend/Reactivate Error', e);
+            alert(e instanceof Error ? e.message : 'Failed to update status.');
         }
     };
 
@@ -638,9 +956,11 @@ const AdminDashboard: React.FC = () => {
     );
 
     const renderUserManager = (type: 'worker' | 'employer') => {
-        const data = type === 'worker' ? filteredWorkers : filteredEmployers;
+        const data = type === 'worker' ? workers : employers;
+        const total = type === 'worker' ? totalWorkers : totalEmployers;
         const title = type === 'worker' ? "Worker Skill Passport Verification" : "Employer Account Moderation";
         const placeholder = type === 'worker' ? 'Search by candidate name or trade...' : 'Search by company or industry...';
+        const totalPages = Math.max(1, Math.ceil(total / USER_PAGE_SIZE));
 
         return (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -649,59 +969,92 @@ const AdminDashboard: React.FC = () => {
                         <h2 className="text-xl font-extrabold text-slate-900">{title}</h2>
                         <p className="text-xs font-mono text-slate-500 mt-1">EZJOB by LENIX Operations Database</p>
                     </div>
-                    <button onClick={() => openModal('CREATE', null, type)} className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs uppercase px-4 py-2.5 rounded-full font-bold shadow-md transition-all">
-                        + Create Record
-                    </button>
                 </div>
                 <input
                     type="text"
                     placeholder={placeholder}
-                    value={searchTerm}
-                    onChange={(e) => handleUserSearch(e, type)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     className="w-full mb-4 px-4 py-2.5 border border-slate-200 rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500"
                 />
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200 font-mono text-xs">
-                        <thead className="bg-slate-900 text-white">
-                            <tr>
-                                {type === 'worker' ?
-                                    (<>
-                                        <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-cyan-400">Worker Name</th>
-                                        <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Trade Skill</th>
-                                    </>) :
-                                    (<>
-                                        <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-cyan-400">Company Name</th>
-                                        <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Industry</th>
-                                    </>)
-                                }
-                                <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Status</th>
-                                <th className="px-6 py-3.5 text-right font-bold uppercase tracking-wider text-slate-300">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-100">
-                            {data.map(user => {
-                                const isSuspended = user.status === 'Suspended';
-                                return (
-                                    <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">{'full_name' in user ? user.full_name : user.company_name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-slate-600">{'trade_or_skill' in user ? user.trade_or_skill : user.industry}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2.5 py-1 inline-flex text-[11px] font-bold rounded-full ${isSuspended ? 'bg-red-100 text-red-800' : 'bg-cyan-100 text-cyan-900'}`}>
-                                                {user.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right font-bold space-x-3">
-                                            <button onClick={() => openModal('VIEW', user, type)} className="text-slate-600 hover:text-slate-900">View</button>
-                                            <button onClick={() => openModal('EDIT', user, type)} className="text-cyan-700 hover:text-cyan-600">Edit</button>
-                                            <button onClick={() => handleUserSuspend(user.id, type)} className={`${isSuspended ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700'}`}>{isSuspended ? 'Reactivate' : 'Suspend'}</button>
-                                            <button onClick={() => handleDelete(user.id, type)} className="text-red-600 hover:text-red-700">Delete</button>
-                                        </td>
+                {usersError && (
+                    <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-mono flex items-center justify-between gap-4">
+                        <span>{usersError}</span>
+                        <button onClick={() => loadUsers()} className="font-bold underline shrink-0">Retry</button>
+                    </div>
+                )}
+                {usersLoading ? (
+                    <div className="py-16"><Spinner /></div>
+                ) : (
+                    <>
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                            <table className="min-w-full divide-y divide-slate-200 font-mono text-xs">
+                                <thead className="bg-slate-900 text-white">
+                                    <tr>
+                                        {type === 'worker' ?
+                                            (<>
+                                                <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-cyan-400">Worker Name</th>
+                                                <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Trade Skill</th>
+                                            </>) :
+                                            (<>
+                                                <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-cyan-400">Company Name</th>
+                                                <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Industry</th>
+                                            </>)
+                                        }
+                                        <th className="px-6 py-3.5 text-left font-bold uppercase tracking-wider text-slate-300">Status</th>
+                                        <th className="px-6 py-3.5 text-right font-bold uppercase tracking-wider text-slate-300">Actions</th>
                                     </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-100">
+                                    {data.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No records found.</td>
+                                        </tr>
+                                    )}
+                                    {data.map(user => {
+                                        const isSuspended = user.status === 'Suspended';
+                                        return (
+                                            <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">{'full_name' in user ? user.full_name : user.company_name}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-slate-600">{'trade_or_skill' in user ? user.trade_or_skill : user.industry}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span className={`px-2.5 py-1 inline-flex text-[11px] font-bold rounded-full ${isSuspended ? 'bg-red-100 text-red-800' : 'bg-cyan-100 text-cyan-900'}`}>
+                                                        {user.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-right font-bold space-x-3">
+                                                    <button onClick={() => openModal('VIEW', user, type)} className="text-slate-600 hover:text-slate-900">View</button>
+                                                    <button onClick={() => openModal('EDIT', user, type)} className="text-cyan-700 hover:text-cyan-600">Edit</button>
+                                                    <button onClick={() => handleUserSuspend(user, type)} className={`${isSuspended ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700'}`}>{isSuspended ? 'Reactivate' : 'Suspend'}</button>
+                                                    <button onClick={() => handleDelete(user, type)} className="text-red-600 hover:text-red-700">Delete</button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="flex items-center justify-between mt-4 font-mono text-xs text-slate-600">
+                            <span>Page {page} of {totalPages} &middot; {total} total</span>
+                            <div className="space-x-2">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page <= 1}
+                                    className="px-3 py-1.5 rounded-lg border border-slate-200 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                                >
+                                    &larr; Prev
+                                </button>
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page >= totalPages}
+                                    className="px-3 py-1.5 rounded-lg border border-slate-200 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                                >
+                                    Next &rarr;
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         );
     };
@@ -736,185 +1089,12 @@ const AdminDashboard: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-slate-500">{new Date(post.publishDate).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right font-bold space-x-3">
                                         <button onClick={() => openModal('EDIT', post, 'blog')} className="text-cyan-700 hover:text-cyan-600">Edit</button>
-                                        <button onClick={() => handleDelete(post.id, 'blog')} className="text-red-600 hover:text-red-700">Delete</button>
+                                        <button onClick={() => handleDelete(post, 'blog')} className="text-red-600 hover:text-red-700">Delete</button>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                </div>
-            </div>
-        );
-    };
-
-    const Modal = () => {
-        const [formData, setFormData] = useState<Partial<WorkerProfile & EmployerProfile & BlogPost>>(
-            currentUser || {}
-        );
-
-        if (!isModalOpen) return null;
-
-        const titleText = `${modalMode === 'CREATE' ? 'Create' : modalMode === 'EDIT' ? 'Edit' : 'View'} ${userType === 'worker' ? 'Worker' : userType === 'employer' ? 'Employer' : 'Blog Post'}`;
-        const isViewMode = modalMode === 'VIEW';
-
-        const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-            if (e.target.type === 'file') {
-                const files = (e.target as HTMLInputElement).files;
-                if (files && files[0]) {
-                    const file = files[0];
-                    const fileUrl = URL.createObjectURL(file);
-                    const name = userType === 'blog' ? 'imageUrl' : e.target.name;
-                    setFormData({ ...formData, [name]: fileUrl });
-                }
-            } else {
-                setFormData({ ...formData, [e.target.name]: e.target.value });
-            }
-        };
-
-        const handleSubmit = (e: React.FormEvent) => {
-            e.preventDefault();
-            handleSave(formData);
-        }
-
-        const FormInput: React.FC<{ label: string, name: string, value: string | number | undefined, type?: string, readOnly?: boolean }> = ({ label, name, value, type = "text", readOnly = false }) => (
-            <div>
-                <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
-                {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm break-words">{value || '-'}</p> :
-                    <input
-                        type={type}
-                        name={name}
-                        defaultValue={value || ''}
-                        onChange={handleChange}
-                        className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500"
-                    />}
-            </div>
-        );
-
-        const FormTextarea: React.FC<{ label: string, name: string, value: string | undefined, readOnly?: boolean, rows?: number }> = ({ label, name, value, readOnly = false, rows = 4 }) => (
-            <div className="md:col-span-2">
-                <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
-                {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm whitespace-pre-wrap">{value || '-'}</p> :
-                    <textarea
-                        name={name}
-                        defaultValue={value || ''}
-                        onChange={handleChange}
-                        rows={rows}
-                        className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500"
-                    />}
-            </div>
-        );
-
-        const FormSelect: React.FC<{ label: string, name: string, value: string | undefined, options: string[], readOnly?: boolean }> = ({ label, name, value, options, readOnly = false }) => (
-            <div>
-                <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
-                {readOnly ? <p className="mt-1 text-slate-900 font-mono text-sm">{value || '-'}</p> :
-                    <select name={name} defaultValue={value || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 bg-white rounded-xl font-mono text-sm focus:outline-none focus:border-cyan-500">
-                        <option value="" disabled>Select...</option>
-                        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>}
-            </div>
-        );
-
-        const FormFileInput: React.FC<{ label: string, name: string, value: string | undefined, readOnly?: boolean, accept?: string }> = ({ label, name, value, readOnly, accept }) => {
-            const isImage = name.includes('photo') || name.includes('logo') || name.includes('image');
-
-            if (readOnly) {
-                return (
-                    <div>
-                        <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
-                        <div className="mt-1">
-                            {value ? (
-                                isImage ? (
-                                    <img src={value} alt={label} className="h-20 w-auto object-cover rounded-xl border border-slate-200" />
-                                ) : (
-                                    <a href={value} target="_blank" rel="noopener noreferrer" className="text-cyan-600 font-mono text-xs hover:underline">View File</a>
-                                )
-                            ) : (
-                                <p className="text-slate-400 text-xs italic">No file attached</p>
-                            )}
-                        </div>
-                    </div>
-                );
-            }
-
-            return (
-                <div>
-                    <label className="block text-xs font-mono font-bold uppercase text-slate-700 mb-1">{label}</label>
-                    <input
-                        type="file"
-                        name={name}
-                        accept={accept}
-                        onChange={handleChange}
-                        className="mt-1 block w-full text-xs font-mono text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 cursor-pointer"
-                    />
-                </div>
-            );
-        };
-
-        const renderWorkerFields = () => {
-            const data = formData as Partial<WorkerProfile>;
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormInput label="Full Name" name="full_name" value={data.full_name} readOnly={isViewMode} />
-                    <FormInput label="Trade / Skill" name="trade_or_skill" value={data.trade_or_skill} readOnly={isViewMode} />
-                    <FormInput label="Experience (Years)" name="experience_years" value={data.experience_years} type="number" readOnly={isViewMode} />
-                    <FormInput label="Country of Origin" name="country_of_origin" value={data.country_of_origin} readOnly={isViewMode} />
-                    <FormInput label="Experience in Country (Years)" name="experience_in_country" value={data.experience_in_country} type="number" readOnly={isViewMode} />
-                    <FormSelect label="Status" name="status" value={data.status} options={['Active', 'Suspended']} readOnly={isViewMode} />
-                    <FormFileInput label="Photo URL" name="photo_url" value={data.photo_url} readOnly={isViewMode} accept="image/*" />
-                    <FormFileInput label="CV Document" name="cv_url" value={data.cv_url} readOnly={isViewMode} />
-                    <FormTextarea label="Professional Summary" name="summary" value={data.summary} readOnly={isViewMode} />
-                </div>
-            );
-        };
-
-        const renderEmployerFields = () => {
-            const data = formData as Partial<EmployerProfile>;
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormInput label="Company Name" name="company_name" value={data.company_name} readOnly={isViewMode} />
-                    <FormInput label="Industry" name="industry" value={data.industry} readOnly={isViewMode} />
-                    <FormInput label="Website URL" name="website_url" value={data.website_url} readOnly={isViewMode} />
-                    <FormInput label="Phone" name="phone" value={data.phone} readOnly={isViewMode} />
-                    <FormInput label="Company Size" name="company_size" value={data.company_size} readOnly={isViewMode} />
-                    <FormInput label="Year Founded" name="year_founded" value={data.year_founded} type="number" readOnly={isViewMode} />
-                    <FormSelect label="Status" name="status" value={data.status} options={['Active', 'Suspended']} readOnly={isViewMode} />
-                    <FormFileInput label="Company Logo" name="company_logo_url" value={data.company_logo_url} readOnly={isViewMode} accept="image/*" />
-                    <FormTextarea label="Company Description" name="description" value={data.description} readOnly={isViewMode} />
-                </div>
-            );
-        };
-
-        const renderBlogFields = () => {
-            const data = formData as Partial<BlogPost>;
-            return (
-                <div className="grid grid-cols-1 gap-4">
-                    <FormInput label="Post Title" name="title" value={data.title} readOnly={isViewMode} />
-                    <FormInput label="Author" name="author" value={data.author} readOnly={isViewMode} />
-                    <FormFileInput label="Illustration Photo" name="imageUrl" value={data.imageUrl} readOnly={isViewMode} accept="image/*" />
-                    <FormTextarea label="Content" name="content" value={data.content} readOnly={isViewMode} rows={10} />
-                </div>
-            );
-        };
-
-        return (
-            <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-                <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-slate-200">
-                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                        <h2 className="text-xl font-extrabold text-slate-900">{titleText}</h2>
-                        <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-                    </div>
-                    <form onSubmit={handleSubmit}>
-                        <div className="space-y-6">
-                            {userType === 'worker' && renderWorkerFields()}
-                            {userType === 'employer' && renderEmployerFields()}
-                            {userType === 'blog' && renderBlogFields()}
-                        </div>
-                        <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-slate-100 font-mono text-xs">
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">Close</button>
-                            {!isViewMode && <button type="submit" className="px-6 py-2.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold transition-all shadow-md">Save Changes</button>}
-                        </div>
-                    </form>
                 </div>
             </div>
         );
@@ -956,12 +1136,20 @@ const AdminDashboard: React.FC = () => {
             </header>
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {view !== 'DASHBOARD' && (
-                    <button onClick={() => { setView('DASHBOARD'); setSearchTerm(''); }} className="mb-6 inline-flex items-center gap-1 text-xs font-mono font-bold uppercase tracking-wider text-cyan-700 hover:text-cyan-600 cursor-pointer">
+                    <button onClick={() => { setView('DASHBOARD'); setSearchInput(''); }} className="mb-6 inline-flex items-center gap-1 text-xs font-mono font-bold uppercase tracking-wider text-cyan-700 hover:text-cyan-600 cursor-pointer">
                         &larr; Back to Dashboard
                     </button>
                 )}
                 {renderContent()}
-                <Modal />
+                <AdminRecordModal
+                    isOpen={isModalOpen}
+                    mode={modalMode}
+                    userType={userType}
+                    currentUser={currentUser}
+                    adminId={adminUser?.id}
+                    onClose={() => setIsModalOpen(false)}
+                    onSave={handleSave}
+                />
             </main>
         </div>
     );

@@ -1,15 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { subscribeToNewsletter } from '../services/db';
+import BrandLogoCluster from './BrandLogoCluster';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Footer: React.FC = () => {
     const { quickLinks, siteAssets } = useSiteContent();
     const { isDark } = useTheme();
 
-    const clarityLogoSrc = '/assets/clarity-logo.jpeg';
-    const lenixLogoSrc = isDark ? '/assets/lenix-logo-dark.jpeg' : '/assets/lenix-logo-light.png';
-    const ezjobLogoSrc = isDark ? '/assets/ezjob-logo-dark.png' : '/assets/ezjob-logo-light.png';
+    const [newsletterEmail, setNewsletterEmail] = useState('');
+    const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [newsletterMessage, setNewsletterMessage] = useState('');
+
+    const handleNewsletterSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!EMAIL_REGEX.test(newsletterEmail)) {
+            setNewsletterStatus('error');
+            setNewsletterMessage('Please enter a valid email address.');
+            return;
+        }
+
+        setNewsletterStatus('loading');
+        setNewsletterMessage('');
+        try {
+            await subscribeToNewsletter(newsletterEmail);
+            setNewsletterStatus('success');
+            setNewsletterMessage('You are subscribed! Watch your inbox for alerts.');
+            setNewsletterEmail('');
+        } catch (error) {
+            console.error('[Footer] Newsletter subscription failed:', error);
+            setNewsletterStatus('error');
+            setNewsletterMessage('Something went wrong. Please try again later.');
+        }
+    };
 
     return (
         <footer className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white border-t border-slate-200 dark:border-slate-800 transition-colors duration-300">
@@ -18,27 +45,7 @@ const Footer: React.FC = () => {
                     {/* Column 1: Logo and About */}
                     <div className="md:col-span-1 flex flex-col gap-3">
                         <div className="flex items-center gap-2.5 flex-wrap p-2 rounded-2xl bg-gradient-to-r from-slate-200/60 via-white/80 to-slate-200/60 dark:from-slate-900/90 dark:via-slate-950/80 dark:to-slate-900/90 border border-slate-200 dark:border-slate-800/80 w-fit">
-                            <div className={`p-1 rounded-xl ${isDark ? 'bg-gradient-to-b from-white via-slate-100 to-slate-200 border border-slate-300 shadow-sm' : 'bg-white shadow-sm border border-slate-200/60'}`}>
-                                <img 
-                                    src={clarityLogoSrc} 
-                                    alt="Clarity E&C Holding Company" 
-                                    className="h-10 sm:h-11 w-auto object-contain" 
-                                />
-                            </div>
-                            <span className="text-slate-400 dark:text-cyan-400/70 font-mono text-xs sm:text-sm font-bold select-none px-0.5">✕</span>
-                            <div className={`p-1 rounded-xl ${isDark ? 'bg-gradient-to-b from-black via-slate-950 to-black border border-slate-800' : 'bg-white shadow-sm border border-slate-200/60'}`}>
-                                <img 
-                                    src={lenixLogoSrc} 
-                                    alt="LENIX Company Logo" 
-                                    className="h-8 sm:h-9 w-auto object-contain" 
-                                />
-                            </div>
-                            <div className="h-6 w-[1px] bg-gradient-to-b from-transparent via-cyan-500/40 to-transparent mx-0.5"></div>
-                            <img 
-                                src={ezjobLogoSrc} 
-                                alt="EZJOB Product Logo" 
-                                className="h-8 sm:h-9 w-auto object-contain" 
-                            />
+                            <BrandLogoCluster ezjobLogoUrl={siteAssets.logoUrl} variant="footer" />
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
                             A Clarity E&C Holding enterprise solution powered by LENIX technology. Precision recruitment and authenticated skill credentialing for the skilled trades.
@@ -70,7 +77,7 @@ const Footer: React.FC = () => {
                         <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
                             <li><Link to="/privacy" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Privacy Policy</Link></li>
                             <li><Link to="/terms" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Terms of Service</Link></li>
-                            <li><span className="text-slate-400 dark:text-slate-500 cursor-not-allowed">ISO 27001 Security (Compliant)</span></li>
+                            <li><span className="text-slate-400 dark:text-slate-500 cursor-not-allowed">Enterprise-Grade Data Security</span></li>
                         </ul>
                     </div>
 
@@ -78,20 +85,35 @@ const Footer: React.FC = () => {
                     <div>
                         <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">Stay Ahead</h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">Get real-time alerts for high-priority skilled trade requisitions.</p>
-                        <form className="flex" onSubmit={(e) => { e.preventDefault(); alert('Subscribed to EZJOB by LENIX alerts!'); }}>
-                            <input 
-                                type="email" 
+                        <form className="flex" onSubmit={handleNewsletterSubmit}>
+                            <input
+                                type="email"
                                 required
-                                placeholder="work@company.com" 
-                                className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-l-lg focus:outline-none focus:border-cyan-500" 
+                                value={newsletterEmail}
+                                onChange={(e) => {
+                                    setNewsletterEmail(e.target.value);
+                                    if (newsletterStatus !== 'idle') {
+                                        setNewsletterStatus('idle');
+                                        setNewsletterMessage('');
+                                    }
+                                }}
+                                placeholder="work@company.com"
+                                disabled={newsletterStatus === 'loading'}
+                                className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-l-lg focus:outline-none focus:border-cyan-500 disabled:opacity-60"
                             />
-                            <button 
-                                type="submit" 
-                                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2.5 rounded-r-lg font-mono text-xs font-semibold transition-all cursor-pointer"
+                            <button
+                                type="submit"
+                                disabled={newsletterStatus === 'loading'}
+                                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2.5 rounded-r-lg font-mono text-xs font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                Join
+                                {newsletterStatus === 'loading' ? '...' : 'Join'}
                             </button>
                         </form>
+                        {newsletterMessage && (
+                            <p className={`text-[11px] mt-2 font-mono ${newsletterStatus === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {newsletterMessage}
+                            </p>
+                        )}
                     </div>
                 </div>
 

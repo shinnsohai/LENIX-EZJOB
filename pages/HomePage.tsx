@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { UserRole } from '../types';
+import { generateJobWithAI } from '../services/geminiService';
 
 const HeroSection = () => {
     const navigate = useNavigate();
@@ -266,23 +267,30 @@ const AiInActionSection = () => {
     const [jobTitle, setJobTitle] = useState('Heavy Machinery Operator');
     const [generatedJD, setGeneratedJD] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [genError, setGenError] = useState('');
 
-    const handleGenerate = () => {
+    const handleGenerate = async () => {
         if (!jobTitle) return;
         setIsGenerating(true);
-        setTimeout(() => {
-            setGeneratedJD(
-                `REQUISITION: Senior ${jobTitle}\n` +
-                `STATUS: High-Priority Deployment\n\n` +
-                `SUMMARY:\nWe are deploying a certified Senior ${jobTitle} for multi-million industrial infrastructure operations. The candidate must possess authenticated trade credentials, rigorous safety compliance, and proven on-site execution.\n\n` +
-                `CORE REQUIREMENTS:\n` +
-                `• 5+ Years verifiable experience in heavy industrial environments\n` +
-                `• Valid High-Risk Work License / SafeWork Accreditation\n` +
-                `• Equipment mastery & precision load management\n` +
-                `• Verified Skill Passport on EZJOB by LENIX (Integrity Score > 85%)`
-            );
+        setGenError('');
+        try {
+            const { description, required_skills } = await generateJobWithAI(jobTitle, 'a leading EZJOB employer');
+            if (!description || description === 'Could not generate description.') {
+                setGenError('AI generation is temporarily unavailable. Please try again shortly.');
+                setGeneratedJD('');
+                return;
+            }
+            const skillsBlock = required_skills.length > 0
+                ? `\n\nCORE REQUIREMENTS:\n${required_skills.map(s => `• ${s}`).join('\n')}`
+                : '';
+            setGeneratedJD(`REQUISITION: ${jobTitle}\n\n${description}${skillsBlock}`);
+        } catch (error) {
+            console.error('Error generating demo job description:', error);
+            setGenError('AI generation is temporarily unavailable. Please try again shortly.');
+            setGeneratedJD('');
+        } finally {
             setIsGenerating(false);
-        }, 600);
+        }
     };
 
     return (
@@ -320,6 +328,12 @@ const AiInActionSection = () => {
                             )}
                         </button>
                     </div>
+
+                    {genError && (
+                        <div className="mt-6 p-4 rounded-2xl bg-red-950/40 border border-red-800/60 text-sm text-red-300">
+                            {genError}
+                        </div>
+                    )}
 
                     {generatedJD && (
                         <div className="mt-6 p-6 rounded-2xl bg-slate-950/90 border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed shadow-xl">

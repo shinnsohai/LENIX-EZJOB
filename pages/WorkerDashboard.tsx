@@ -1,18 +1,33 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { auth } from '../firebaseConfig';
-import { getWorkerProfile, saveWorkerProfile, getSubcollectionData, addSubcollectionItem, uploadFile, deleteSubcollectionItem, updateSubcollectionItem } from '../services/db';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import {
+    getWorkerProfile,
+    saveWorkerProfile,
+    uploadFile,
+    getWorkerProjects,
+    addWorkerProject,
+    updateWorkerProject,
+    deleteWorkerProject,
+    getWorkerCertifications,
+    addWorkerCertification,
+    deleteWorkerCertification,
+    getWorkerReferences,
+} from '../services/db';
+import { migrateLegacySkills } from '../utils/workerSkills';
 import VideoLinkInput from '../components/forms/VideoLinkInput';
 import DynamicTradeForm from '../components/forms/DynamicTradeForm';
 import PassportLayout from '../components/profile/PassportLayout';
 import Spinner from '../components/Spinner';
-import { Upload, Edit3, Plus, Trash2, FileCheck } from 'lucide-react';
+import { Upload, Edit3, Plus, Trash2, FileCheck, AlertTriangle } from 'lucide-react';
 import type { WorkerProfile, Project, Certification, Reference, UserSkill } from '../types';
 import { countries } from '../data/countries';
 
 export default function WorkerDashboard() {
+    const { user } = useAuth();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const cvInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,73 +59,66 @@ export default function WorkerDashboard() {
     const [newProject, setNewProject] = useState<Partial<Project>>({});
     const [newCert, setNewCert] = useState<Partial<Certification>>({});
     const [certFile, setCertFile] = useState<File | null>(null);
-    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+    // Unified inline delete-confirmation UX (replaces the old mix of
+    // window.confirm for projects and a bespoke inline timeout for certs).
+    const [deleteConfirmProjectId, setDeleteConfirmProjectId] = useState<string | null>(null);
+    const [deleteConfirmCertId, setDeleteConfirmCertId] = useState<string | null>(null);
 
     // Load existing data
-    useEffect(() => {
-        const loadData = async () => {
-            console.log("WorkerDashboard: loadData started");
-            const uid = auth.currentUser?.uid;
-            console.log("WorkerDashboard: Current UID:", uid);
+    const loadData = useCallback(async () => {
+        const uid = user?.id;
+        setError(null);
 
-            if (uid) {
+        if (!uid) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const profileData = await getWorkerProfile(uid);
+
+            if (profileData) {
+                const loadedSkills: UserSkill[] = migrateLegacySkills(profileData);
+
+                setProfile(prev => ({
+                    ...prev,
+                    ...profileData,
+                    skills: loadedSkills,
+                    physical_attributes: { ...prev.physical_attributes, ...(profileData.physical_attributes || {}) },
+                    media_links: { ...prev.media_links, ...(profileData.media_links || {}) },
+                    trade_specifics: profileData.trade_specifics || {}
+                }));
+
+                // Load subcollections safely — worker sub-resources key off the
+                // worker_profiles row's own id, not the auth user id.
                 try {
-                    console.log("WorkerDashboard: Fetching profile...");
-                    const profileData = await getWorkerProfile(uid);
-                    console.log("WorkerDashboard: Profile data:", profileData);
-
-                    if (profileData) {
-                        // Legacy Migration: If 'skills' array is missing/empty but 'trade_or_skill' exists, create the array
-                        let loadedSkills: UserSkill[] = profileData.skills || [];
-                        if (loadedSkills.length === 0 && profileData.trade_or_skill) {
-                            loadedSkills = [{
-                                trade: profileData.trade_or_skill,
-                                tags: profileData.trade_specifics || {},
-                                isPrimary: true
-                            }];
-                        }
-
-                        setProfile(prev => ({
-                            ...prev,
-                            ...profileData,
-                            skills: loadedSkills, // Use the migrated or loaded skills
-                            physical_attributes: { ...prev.physical_attributes, ...(profileData.physical_attributes || {}) },
-                            media_links: { ...prev.media_links, ...(profileData.media_links || {}) },
-                            trade_specifics: profileData.trade_specifics || {}
-                        }));
-                    } else {
-                        console.log("WorkerDashboard: No profile found, setting defaults.");
-                        setProfile(prev => ({ ...prev, id: uid, user_id: uid }));
-                        setIsEditing(true);
-                    }
-
-                    // Load subcollections safely
-                    try {
-                        console.log("WorkerDashboard: Fetching subcollections...");
-                        const [p, c, r] = await Promise.all([
-                            getSubcollectionData(uid, 'projects'),
-                            getSubcollectionData(uid, 'certifications'),
-                            getSubcollectionData(uid, 'references')
-                        ]);
-                        console.log("WorkerDashboard: Subcollections loaded:", { p, c, r });
-                        setProjects(p as Project[]);
-                        setCerts(c as Certification[]);
-                        setReferences(r as Reference[]);
-                    } catch (subError) {
-                        console.warn("Could not load subcollections (permissions might be missing):", subError);
-                    }
-
-                } catch (e) {
-                    console.error("Error loading profile:", e);
+                    const [p, c, r] = await Promise.all([
+                        getWorkerProjects(profileData.id),
+                        getWorkerCertifications(profileData.id),
+                        getWorkerReferences(profileData.id)
+                    ]);
+                    setProjects(p);
+                    setCerts(c);
+                    setReferences(r);
+                } catch (subError) {
+                    console.warn("Could not load projects/certifications/references:", subError);
                 }
             } else {
-                console.log("WorkerDashboard: No UID found (user might not be logged in).");
+                setProfile(prev => ({ ...prev, id: '', user_id: uid }));
+                setIsEditing(true);
             }
-            setLoading(false);
-            console.log("WorkerDashboard: Loading set to false");
-        };
+        } catch (e) {
+            console.error("Error loading profile:", e);
+            setError("We couldn't load your profile. Please check your connection and try again.");
+        }
+        setLoading(false);
+    }, [user]);
+
+    useEffect(() => {
         loadData();
-    }, []);
+    }, [loadData]);
 
     // Handle changes from DynamicTradeForm
     const handleSkillsChange = (newSkills: UserSkill[]) => {
@@ -128,12 +136,11 @@ export default function WorkerDashboard() {
 
     const handleSaveMainProfile = async () => {
         setLoading(true);
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+        const uid = user?.id;
+        if (!uid) { setLoading(false); return; }
 
         try {
-            // Ensure ID is set
-            const profileToSave = { ...profile, id: uid, user_id: uid };
+            const profileToSave = { ...profile, user_id: uid };
 
             // Ensure skills is defined to prevent data loss
             if (!profileToSave.skills) {
@@ -141,6 +148,17 @@ export default function WorkerDashboard() {
             }
 
             await saveWorkerProfile(profileToSave);
+
+            // On first save, the DB assigns the worker_profiles row its own id
+            // (distinct from the auth user id) — re-fetch it so later steps
+            // (projects/certifications, which are keyed off that id) work.
+            if (!profile.id) {
+                const saved = await getWorkerProfile(uid);
+                if (saved) {
+                    setProfile(prev => ({ ...prev, id: saved.id }));
+                }
+            }
+
             if (step < 5) setStep(step + 1);
             else {
                 setIsEditing(false);
@@ -154,22 +172,21 @@ export default function WorkerDashboard() {
     };
 
     const handleAddProject = async () => {
-        const uid = auth.currentUser?.uid;
-        if (!uid || !newProject.project_name) {
-            alert("Project name is required.");
+        if (!profile.id || !newProject.project_name) {
+            if (!profile.id) alert("Please save your profile first (Step 1) before adding work history.");
+            else alert("Project name is required.");
             return;
         }
 
         try {
             if (newProject.id) {
                 // Update existing project
-                await updateSubcollectionItem(uid, 'projects', newProject.id, newProject);
-
+                await updateWorkerProject(newProject.id, newProject);
                 setProjects(prev => prev.map(p => p.id === newProject.id ? { ...p, ...newProject } as Project : p));
                 alert("Project updated successfully!");
             } else {
                 // Add new project
-                const newId = await addSubcollectionItem(uid, 'projects', newProject);
+                const newId = await addWorkerProject(profile.id, newProject as Omit<Project, 'id'>);
                 const projectWithId = { ...newProject, id: newId } as Project;
                 setProjects(prev => [...prev, projectWithId]);
                 alert("Project added successfully!");
@@ -190,23 +207,30 @@ export default function WorkerDashboard() {
     const handleDeleteProject = async (projectId: string | undefined) => {
         if (!projectId) return;
 
-        if (window.confirm("Are you sure you want to delete this project?")) {
-            const uid = auth.currentUser?.uid;
-            if (!uid) return;
+        // Inline confirmation, same pattern as certification delete.
+        if (deleteConfirmProjectId !== projectId) {
+            setDeleteConfirmProjectId(projectId);
+            setTimeout(() => setDeleteConfirmProjectId(null), 3000);
+            return;
+        }
+        setDeleteConfirmProjectId(null);
 
-            try {
-                await deleteSubcollectionItem(uid, 'projects', projectId);
-                setProjects(prev => prev.filter(p => p.id !== projectId));
-            } catch (e) {
-                console.error("Error deleting project:", e);
-                alert("Failed to delete project.");
-            }
+        try {
+            await deleteWorkerProject(projectId);
+            setProjects(prev => prev.filter(p => p.id !== projectId));
+        } catch (e) {
+            console.error("Error deleting project:", e);
+            alert("Failed to delete project.");
         }
     };
 
     const handleAddCert = async () => {
-        const uid = auth.currentUser?.uid;
-        if (!uid || !newCert.cert_name) return;
+        if (!profile.id || !newCert.cert_name) {
+            if (!profile.id) alert("Please save your profile first (Step 1) before adding certifications.");
+            return;
+        }
+        const uid = user?.id;
+        if (!uid) return;
 
         // Validate File Size (2MB = 2 * 1024 * 1024 bytes)
         if (certFile && certFile.size > 2 * 1024 * 1024) {
@@ -217,7 +241,7 @@ export default function WorkerDashboard() {
         let downloadUrl = '';
         if (certFile) {
             try {
-                downloadUrl = await uploadFile(certFile, `Worker_Certs/${uid}/${certFile.name}`);
+                downloadUrl = await uploadFile('worker-cert-docs', uid, certFile);
             } catch (e) {
                 alert("Failed to upload certificate file");
                 return;
@@ -226,7 +250,11 @@ export default function WorkerDashboard() {
 
         try {
             // 1. Add item and GET THE ID back
-            const newId = await addSubcollectionItem(uid, 'certifications', { ...newCert, document_url: downloadUrl });
+            const newId = await addWorkerCertification(profile.id, {
+                cert_name: newCert.cert_name!,
+                expiry_date: newCert.expiry_date || '',
+                document_url: downloadUrl,
+            });
 
             // 2. Manually update local state with the new item AND its ID.
             const newCertItem: Certification = {
@@ -257,30 +285,28 @@ export default function WorkerDashboard() {
         }
 
         // Inline Confirmation Logic
-        if (deleteConfirmId !== certId) {
-            setDeleteConfirmId(certId);
+        if (deleteConfirmCertId !== certId) {
+            setDeleteConfirmCertId(certId);
             // Auto-reset after 3 seconds
-            setTimeout(() => setDeleteConfirmId(null), 3000);
+            setTimeout(() => setDeleteConfirmCertId(null), 3000);
             return;
         }
-
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
 
         try {
             // Optimistically update UI first for better responsiveness
             setCerts(prev => prev.filter(c => c.id !== certId));
-            setDeleteConfirmId(null);
+            setDeleteConfirmCertId(null);
 
             // Then delete from DB
-            await deleteSubcollectionItem(uid, 'certifications', certId);
-            console.log("Certification deleted successfully from DB:", certId);
+            await deleteWorkerCertification(certId);
         } catch (e) {
             console.error("Error deleting certification:", e);
             alert("Failed to delete certification from database. Refreshing list.");
             // Revert / Refresh if failed
-            const updated = await getSubcollectionData(uid, 'certifications');
-            setCerts(updated as Certification[]);
+            if (profile.id) {
+                const updated = await getWorkerCertifications(profile.id);
+                setCerts(updated);
+            }
         }
     };
 
@@ -291,13 +317,13 @@ export default function WorkerDashboard() {
                 alert("File size must be less than 5MB");
                 return;
             }
+            const uid = user?.id;
+            if (!uid) return;
             setLoading(true);
             try {
-                const uid = auth.currentUser?.uid;
-                if (!uid) return;
-                const downloadUrl = await uploadFile(file, `Worker_CV/${uid}/${file.name}`);
+                const downloadUrl = await uploadFile('worker-cvs', uid, file);
 
-                const updatedProfile = { ...profile, cv_url: downloadUrl, id: uid, user_id: uid };
+                const updatedProfile = { ...profile, cv_url: downloadUrl, user_id: uid };
                 await saveWorkerProfile(updatedProfile);
                 setProfile(updatedProfile);
                 alert("CV Uploaded Successfully!");
@@ -314,6 +340,22 @@ export default function WorkerDashboard() {
 
 
     if (loading) return <div className="flex justify-center items-center min-h-screen"><Spinner size="lg" /></div>;
+
+    if (error) {
+        return (
+            <div className="flex flex-col justify-center items-center min-h-screen px-4 text-center">
+                <AlertTriangle size={40} className="text-red-500 mb-3" />
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Couldn't load your profile</h2>
+                <p className="text-slate-500 mb-6 max-w-md">{error}</p>
+                <button
+                    onClick={() => loadData()}
+                    className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
 
     // --- VIEW MODE: Show Passport Layout ---
     if (!isEditing) {
@@ -509,6 +551,7 @@ export default function WorkerDashboard() {
                         <div className="flex items-center gap-4">
                             <div className="flex-grow">
                                 <input
+                                    ref={cvInputRef}
                                     type="file"
                                     accept=".pdf,.doc,.docx"
                                     onChange={handleCVUpload}
@@ -584,10 +627,10 @@ export default function WorkerDashboard() {
                                     <button
                                         type="button"
                                         onClick={() => handleDeleteCert(c.id)}
-                                        className={`transition-all duration-200 p-1 rounded ${deleteConfirmId === c.id ? 'bg-red-600 text-white px-3' : 'text-red-500 hover:text-red-700 hover:bg-red-50'}`}
+                                        className={`transition-all duration-200 p-1 rounded ${deleteConfirmCertId === c.id ? 'bg-red-600 text-white px-3' : 'text-red-500 hover:text-red-700 hover:bg-red-50'}`}
                                         title="Delete Certification"
                                     >
-                                        {deleteConfirmId === c.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
+                                        {deleteConfirmCertId === c.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
                                     </button>
                                 </div>
                             </div>
@@ -679,10 +722,10 @@ export default function WorkerDashboard() {
                                         </button>
                                         <button
                                             onClick={() => handleDeleteProject(p.id)}
-                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                            className={`p-1 rounded transition-all duration-200 ${deleteConfirmProjectId === p.id ? 'bg-red-600 text-white px-3' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}
                                             title="Delete"
                                         >
-                                            <Trash2 size={16} />
+                                            {deleteConfirmProjectId === p.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
                                         </button>
                                     </div>
                                 </div>

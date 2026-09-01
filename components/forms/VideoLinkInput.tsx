@@ -13,9 +13,9 @@ export default function VideoLinkInput({ label, value, onChange, placeholder }: 
   const [status, setStatus] = useState<'idle' | 'valid' | 'invalid'>('idle'); 
 
   const validateUrl = (url: string) => {
-    // Simple regex for common video platforms
-    const videoRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|tiktok\.com|vimeo\.com|facebook\.com)\/.+$/;
-    
+    // Pragmatic allowlist for common video platforms (and their common subdomains/short-link forms).
+    const videoRegex = /^(https?:\/\/)?(www\.|m\.|player\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com|tiktok\.com|vimeo\.com|facebook\.com|fb\.watch)\/.+$/;
+
     if (!url) {
       setStatus('idle');
       return;

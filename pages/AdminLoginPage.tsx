@@ -2,22 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ShieldCheck, Lock, User, Zap } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
+import { UserRole } from '../types';
+import { ShieldCheck, Lock, User } from 'lucide-react';
 
 const AdminLoginPage: React.FC = () => {
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { login } = useAuth();
+    const { login, logout } = useAuth();
     const { isDark } = useTheme();
     const navigate = useNavigate();
-
-    const handleQuickFill = () => {
-        setUsername('admin');
-        setPassword('admin123');
-        setError('');
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,13 +21,33 @@ const AdminLoginPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            if (username === 'admin' && (password === 'admin123' || password === '123123')) {
-                await login('admin', 'admin123');
-                sessionStorage.setItem('isAdmin', 'true');
-                navigate('/admin/dashboard');
-            } else {
-                setError('Invalid Admin credentials. Use ID: admin / PASS: admin123');
+            await login(email, password);
+
+            // AuthContext resolves the profile asynchronously via
+            // onAuthStateChange; fetch the fresh session/profile directly here
+            // so we can gate on the real role before granting access.
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session?.user) {
+                setError('Login failed. Please try again.');
+                setIsLoading(false);
+                return;
             }
+
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profileError || !profile || profile.role !== UserRole.ADMIN) {
+                await logout();
+                setError('This account does not have admin access.');
+                setIsLoading(false);
+                return;
+            }
+
+            navigate('/admin/dashboard');
         } catch (err: any) {
             console.error('Admin login error:', err);
             setError(err.message || 'Login failed. Please try again.');
@@ -58,36 +74,21 @@ const AdminLoginPage: React.FC = () => {
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">EZJOB by LENIX Intelligence & Moderation</p>
                     </div>
 
-                    {/* Quick Demo Helper Box */}
-                    <div className="mb-6 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-center justify-between text-xs font-mono">
-                        <div>
-                            <div className="text-amber-800 dark:text-amber-300 font-bold">Temporary Test Account:</div>
-                            <div className="text-[11px] text-slate-600 dark:text-slate-400">ID: <span className="font-bold text-slate-900 dark:text-white">admin</span> | Pass: <span className="font-bold text-slate-900 dark:text-white">admin123</span></div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleQuickFill}
-                            className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl flex items-center gap-1 text-[11px] transition-all cursor-pointer shadow-xs"
-                        >
-                            <Zap size={12} />
-                            <span>Fill</span>
-                        </button>
-                    </div>
-
                     <form onSubmit={handleSubmit} className="space-y-4 font-mono text-xs">
                         <div>
-                            <label className="block text-slate-600 dark:text-slate-400 uppercase tracking-wider text-[11px] mb-1.5 font-bold">Admin ID</label>
+                            <label className="block text-slate-600 dark:text-slate-400 uppercase tracking-wider text-[11px] mb-1.5 font-bold">Admin Email</label>
                             <div className="relative">
                                 <User size={16} className="absolute left-3.5 top-3 text-slate-400" />
                                 <input
-                                    id="username"
-                                    name="username"
-                                    type="text"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
+                                    id="email"
+                                    name="email"
+                                    type="email"
+                                    autoComplete="username"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     required
                                     className="block w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:border-amber-500 font-mono text-sm"
-                                    placeholder="admin"
+                                    placeholder="admin@example.com"
                                 />
                             </div>
                         </div>
@@ -100,6 +101,7 @@ const AdminLoginPage: React.FC = () => {
                                     id="password"
                                     name="password"
                                     type="password"
+                                    autoComplete="current-password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required

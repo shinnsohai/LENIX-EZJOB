@@ -356,26 +356,43 @@ export const reapplyApplication = async (applicationId: string): Promise<void> =
     if (error) throw error;
 };
 
-export const getJobApplicants = async (jobId: string): Promise<WorkerProfile[]> => {
+export interface JobApplicant {
+    applicationId: string;
+    status: Application['status'];
+    worker: WorkerProfile;
+}
+
+/**
+ * Applicants for a job, each paired with their application's id + status so
+ * callers (e.g. Shortlist/Reject) can call updateApplicationStatus directly
+ * without a second lookup.
+ */
+export const getJobApplicants = async (jobId: string): Promise<JobApplicant[]> => {
     // applications.worker_id and worker_profiles.user_id both reference
     // profiles(id) but not each other, so this is two queries rather than a
     // single PostgREST embed (no direct FK path to embed across).
     const { data: apps, error: appsError } = await supabase
         .from('applications')
-        .select('worker_id')
+        .select('id, worker_id, status')
         .eq('job_id', jobId)
         .neq('status', 'Withdrawn');
     if (appsError) { console.error('Error fetching applicants:', appsError); return []; }
-
-    const workerUserIds = (apps ?? []).map((a) => a.worker_id);
-    if (workerUserIds.length === 0) return [];
+    if (!apps || apps.length === 0) return [];
 
     const { data: workers, error: workersError } = await supabase
         .from('worker_profiles')
         .select('*')
-        .in('user_id', workerUserIds);
+        .in('user_id', apps.map((a) => a.worker_id));
     if (workersError) { console.error('Error fetching applicant profiles:', workersError); return []; }
-    return (workers ?? []) as WorkerProfile[];
+
+    const workerByUserId = new Map((workers ?? []).map((w: any) => [w.user_id, w as WorkerProfile]));
+    return apps
+        .filter((a) => workerByUserId.has(a.worker_id))
+        .map((a) => ({
+            applicationId: a.id,
+            status: a.status as Application['status'],
+            worker: workerByUserId.get(a.worker_id)!,
+        }));
 };
 
 export const updateApplicationStatus = async (

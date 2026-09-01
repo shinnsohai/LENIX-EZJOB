@@ -1,8 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { getEmployerProfile, getJobs } from '../services/db';
 import Spinner from '../components/Spinner';
 import { Building2, MapPin, Globe, Phone, Users, Calendar, ArrowLeft, Briefcase, DollarSign } from 'lucide-react';
 import type { EmployerProfile, Job } from '../types';
@@ -13,38 +12,30 @@ export default function CompanyProfilePage() {
     const [profile, setProfile] = useState<EmployerProfile | null>(null);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchCompanyData();
-    }, [id]);
-
-    const fetchCompanyData = async () => {
+    const fetchCompanyData = useCallback(async () => {
         if (!id) return;
+        setLoading(true);
+        setError(null);
         try {
-            // Fetch employer profile
-            const profileDoc = await getDoc(doc(db, 'employerProfiles', id));
-            if (profileDoc.exists()) {
-                setProfile({ id: profileDoc.id, ...profileDoc.data() } as EmployerProfile);
-            }
-
-            // Fetch active jobs from this employer
-            const jobsQuery = query(
-                collection(db, 'jobs'),
-                where('employer_id', '==', id),
-                where('status', '==', 'Active')
-            );
-            const jobsSnapshot = await getDocs(jobsQuery);
-            const jobsList: Job[] = [];
-            jobsSnapshot.forEach((doc) => {
-                jobsList.push({ id: doc.id, ...doc.data() } as Job);
-            });
-            setJobs(jobsList);
-        } catch (error) {
-            console.error("Error fetching company data:", error);
+            const [profileData, activeJobs] = await Promise.all([
+                getEmployerProfile(id),
+                getJobs({ employerId: id, status: 'Active' }),
+            ]);
+            setProfile(profileData);
+            setJobs(activeJobs);
+        } catch (err) {
+            console.error("Error fetching company data:", err);
+            setError("Couldn't load this company's profile. Please try again.");
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
+
+    useEffect(() => {
+        fetchCompanyData();
+    }, [fetchCompanyData]);
 
     const handleViewJob = (jobId: string) => {
         navigate(`/jobs/${jobId}`);
@@ -54,6 +45,22 @@ export default function CompanyProfilePage() {
         return (
             <div className="flex justify-center items-center min-h-screen">
                 <Spinner size="lg" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="container mx-auto px-4 py-8">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-red-600">{error}</h2>
+                    <button
+                        onClick={fetchCompanyData}
+                        className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                    >
+                        Retry
+                    </button>
+                </div>
             </div>
         );
     }
@@ -202,7 +209,7 @@ export default function CompanyProfilePage() {
                                     </div>
                                     <p className="text-slate-600 line-clamp-2 mb-3">{job.description}</p>
                                     <div className="flex flex-wrap gap-2">
-                                        {job.required_skills.slice(0, 5).map((skill, index) => (
+                                        {(job.required_skills ?? []).slice(0, 5).map((skill, index) => (
                                             <span
                                                 key={index}
                                                 className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs"

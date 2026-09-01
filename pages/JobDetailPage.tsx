@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { getJobById, getWorkerApplications, createApplication } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
 import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle } from 'lucide-react';
+import { UserRole } from '../types';
 import type { Job } from '../types';
 
 export default function JobDetailPage() {
@@ -17,29 +17,57 @@ export default function JobDetailPage() {
     const [applying, setApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
 
-    useEffect(() => {
-        fetchJob();
-    }, [id]);
-
-    const fetchJob = async () => {
+    const fetchJob = useCallback(async () => {
         if (!id) return;
+        setLoading(true);
         try {
-            const jobDoc = await getDoc(doc(db, 'jobs', id));
-            if (jobDoc.exists()) {
-                setJob({ id: jobDoc.id, ...jobDoc.data() } as Job);
+            const [jobData, applications] = await Promise.all([
+                getJobById(id),
+                user && user.role === UserRole.WORKER ? getWorkerApplications(user.id) : Promise.resolve([]),
+            ]);
+
+            if (jobData) {
+                setJob(jobData);
             } else {
                 console.error("Job not found");
             }
+
+            const alreadyApplied = applications.some(app => app.job_id === id && app.status !== 'Withdrawn');
+            setHasApplied(alreadyApplied);
         } catch (error) {
             console.error("Error fetching job:", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [id, user]);
 
-    const handleApply = () => {
-        // Navigate back to jobs page and trigger apply
-        navigate('/jobs');
+    useEffect(() => {
+        fetchJob();
+    }, [fetchJob]);
+
+    const handleApply = async () => {
+        if (!job) return;
+
+        if (!user) {
+            navigate('/login');
+            return;
+        }
+
+        if (user.role !== UserRole.WORKER) {
+            alert("Employer accounts cannot apply for jobs.");
+            return;
+        }
+
+        setApplying(true);
+        try {
+            await createApplication(job, user.id);
+            setHasApplied(true);
+        } catch (error: any) {
+            console.error("Error applying to job:", error);
+            alert(error.message || "Failed to submit application. Please try again.");
+        } finally {
+            setApplying(false);
+        }
     };
 
     const handleViewCompany = () => {
@@ -130,6 +158,8 @@ export default function JobDetailPage() {
                                 <CheckCircle size={20} className="inline mr-2" />
                                 Already Applied
                             </>
+                        ) : applying ? (
+                            'Submitting...'
                         ) : (
                             'Apply for this Position'
                         )}
@@ -148,7 +178,7 @@ export default function JobDetailPage() {
                 <div className="bg-white rounded-xl shadow-lg p-8">
                     <h2 className="text-2xl font-bold text-slate-900 mb-4">Required Skills</h2>
                     <div className="flex flex-wrap gap-3">
-                        {job.required_skills.map((skill, index) => (
+                        {(job.required_skills ?? []).map((skill, index) => (
                             <span
                                 key={index}
                                 className="px-4 py-2 bg-emerald-100 text-emerald-800 rounded-full font-medium"
@@ -174,6 +204,8 @@ export default function JobDetailPage() {
                                 <CheckCircle size={20} className="inline mr-2" />
                                 Already Applied
                             </>
+                        ) : applying ? (
+                            'Submitting...'
                         ) : (
                             'Apply for this Position'
                         )}

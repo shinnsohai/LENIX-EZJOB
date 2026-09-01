@@ -13,12 +13,17 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [theme, setThemeState] = useState<Theme>(() => {
-        // Retrieve stored theme or default to 'dark' for LENIX high-tech aesthetic
+        // Retrieve stored theme if the user has already chosen one explicitly.
         const storedTheme = localStorage.getItem('lenix_theme');
         if (storedTheme === 'light' || storedTheme === 'dark') {
             return storedTheme;
         }
-        return 'dark';
+        // First visit, no stored preference — respect the OS/browser setting
+        // instead of always forcing dark.
+        if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
+        return 'light';
     });
 
     useEffect(() => {

@@ -1,6 +1,12 @@
 import React, { useState, createContext, useContext, useMemo, useCallback, useEffect } from 'react';
 import type { BlogPost } from '../types';
-import { getSiteContent, saveSiteContent } from '../services/db';
+import {
+    getSiteContent,
+    saveSiteContent,
+    getBlogPosts,
+    saveBlogPost as dbSaveBlogPost,
+    deleteBlogPost as dbDeleteBlogPost,
+} from '../services/db';
 
 // Types
 export interface QuickLink {
@@ -74,17 +80,23 @@ interface SiteContentContextType {
     careersPageContent: CareersPageContent;
     homepageContent: HomepageContent;
     siteAssets: SiteAssets;
-    updateQuickLinks: (newLinks: QuickLink[]) => void;
-    updateLegalPagesContent: (newContent: LegalPagesContent) => void;
-    updateBlogPosts: (newPosts: BlogPost[]) => void;
-    updateAboutPageContent: (newContent: AboutPageContent) => void;
-    updateContactPageContent: (newContent: ContactPageContent) => void;
-    updateCareersPageContent: (newContent: CareersPageContent) => void;
-    updateHomepageContent: (newContent: HomepageContent) => void;
-    updateSiteAssets: (newAssets: SiteAssets) => void;
+    /** Non-null when the most recent load or save against site_content/blog_posts failed. */
+    error: string | null;
+    updateQuickLinks: (newLinks: QuickLink[]) => Promise<void>;
+    updateLegalPagesContent: (newContent: LegalPagesContent) => Promise<void>;
+    /** Upserts a single blog post (create when `id` is absent, update otherwise). */
+    saveBlogPost: (post: Partial<BlogPost> & { id?: string }) => Promise<void>;
+    deleteBlogPost: (id: string) => Promise<void>;
+    updateAboutPageContent: (newContent: AboutPageContent) => Promise<void>;
+    updateContactPageContent: (newContent: ContactPageContent) => Promise<void>;
+    updateCareersPageContent: (newContent: CareersPageContent) => Promise<void>;
+    updateHomepageContent: (newContent: HomepageContent) => Promise<void>;
+    updateSiteAssets: (newAssets: SiteAssets) => Promise<void>;
 }
 
-// Initial Data (Defaults if DB is empty)
+// Initial Data (in-memory fallback only — never written back to the DB).
+// The real starting content lives in supabase/migrations/0005_seed.sql; these
+// are used only if a row is unexpectedly missing/unreachable at runtime.
 const initialQuickLinks: QuickLink[] = [
     { id: 'ql1', text: 'About Us', url: '/about' },
     { id: 'ql2', text: 'Contact', url: '/contact' },
@@ -96,33 +108,6 @@ const initialLegalPages: LegalPagesContent = {
     privacyPolicy: `Your privacy is important to us. It is EZJOB by LENIX's policy to respect your privacy regarding any information we may collect from you across our website, and other sites we own and operate. We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent. We also let you know why we’re collecting it and how it will be used.`,
     termsOfService: `By accessing the website at EZJOB by LENIX, you are agreeing to be bound by these terms of service, all applicable laws and regulations, and agree that you are responsible for compliance with any applicable local laws. If you do not agree with any of these terms, you are prohibited from using or accessing this site. The materials contained in this website are protected by applicable copyright and trademark law.`
 };
-
-const initialBlogPosts: BlogPost[] = [
-    {
-        id: 'bp1',
-        title: 'Top 10 High-Velocity Construction & Engineering Jobs',
-        content: 'An in-depth look at the most in-demand roles in the industrial sector, from structural engineers to certified heavy machinery operators. We explore salary expectations and required certifications.',
-        imageUrl: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?q=80&w=2070&auto=format&fit=crop',
-        author: 'LENIX Intelligence Team',
-        publishDate: '2025-08-15T10:00:00Z',
-    },
-    {
-        id: 'bp2',
-        title: 'How LENIX AI Engine Is Revolutionizing Skilled Trades Recruitment',
-        content: 'Discover how precision matching and verified skill passports connect top industrial talent with infrastructure projects in minutes rather than weeks.',
-        imageUrl: 'https://images.unsplash.com/photo-1678453140515-aa21c81c2dfd?q=80&w=2070&auto=format&fit=crop',
-        author: 'LENIX AI Labs',
-        publishDate: '2025-08-10T14:30:00Z',
-    },
-    {
-        id: 'bp3',
-        title: 'Workforce Mobility & Skill Passport Standards',
-        content: 'A comprehensive guide to digital trade credentialing and cross-border project deployment across Singapore, Malaysia, and regional hubs.',
-        imageUrl: 'https://images.unsplash.com/photo-1560942485-b2a1a20628fd?q=80&w=1935&auto=format&fit=crop',
-        author: 'LENIX Standards Board',
-        publishDate: '2025-08-05T09:00:00Z',
-    },
-];
 
 const initialAboutPageContent: AboutPageContent = {
     title: 'About EZJOB by LENIX',
@@ -189,83 +174,181 @@ export const useSiteContent = () => {
 export const SiteContentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [quickLinks, setQuickLinks] = useState<QuickLink[]>(initialQuickLinks);
     const [legalPagesContent, setLegalPagesContent] = useState<LegalPagesContent>(initialLegalPages);
-    const [blogPosts, setBlogPosts] = useState<BlogPost[]>(initialBlogPosts);
+    const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
     const [aboutPageContent, setAboutPageContent] = useState<AboutPageContent>(initialAboutPageContent);
     const [contactPageContent, setContactPageContent] = useState<ContactPageContent>(initialContactPageContent);
     const [careersPageContent, setCareersPageContent] = useState<CareersPageContent>(initialCareersPageContent);
     const [homepageContent, setHomepageContent] = useState<HomepageContent>(initialHomepageContent);
     const [siteAssets, setSiteAssets] = useState<SiteAssets>(initialSiteAssets);
+    const [error, setError] = useState<string | null>(null);
 
-    // Load initial data from Firestore
+    // Load content from Postgres (site_content + blog_posts). The DB is the
+    // source of truth — the seed migration (0005_seed.sql) already populates
+    // every site_content row, so a missing row here is treated as an error
+    // case: fall back to an in-memory default for rendering, but never write
+    // it back (no more runtime re-seeding of the prod DB).
     useEffect(() => {
-        const loadContent = async () => {
-            const load = async (id: string, setter: any, defaultVal: any) => {
-                try {
-                    const data = await getSiteContent(id);
-                    if (data !== undefined) {
-                        setter(data);
-                    } else {
-                        console.log(`[SiteContent] Seeding ${id} with defaults`);
-                        await saveSiteContent(id, defaultVal);
-                    }
-                } catch (error) {
-                    console.error(`[SiteContent] Failed to load ${id}:`, error);
-                }
-            };
+        let cancelled = false;
 
-            await Promise.all([
-                load('quickLinks', (d: any) => setQuickLinks(d.data), { data: initialQuickLinks }),
-                load('legalPages', setLegalPagesContent, initialLegalPages),
-                load('blogPosts', (d: any) => setBlogPosts(d.data), { data: initialBlogPosts }),
-                load('aboutPage', setAboutPageContent, initialAboutPageContent),
-                load('contactPage', setContactPageContent, initialContactPageContent),
-                load('careersPage', setCareersPageContent, initialCareersPageContent),
-                load('homepage', setHomepageContent, initialHomepageContent),
-                load('assets', setSiteAssets, initialSiteAssets),
-            ]);
+        const load = async <T,>(id: string, setter: (v: T) => void, defaultVal: T) => {
+            try {
+                const data = await getSiteContent(id);
+                if (cancelled) return;
+                setter(data !== undefined ? (data as T) : defaultVal);
+            } catch (err) {
+                console.error(`[SiteContent] Failed to load "${id}":`, err);
+                if (cancelled) return;
+                setter(defaultVal);
+                setError(prev => prev ?? `Failed to load some site content ("${id}"). Showing defaults — changes here may not be saved until this is resolved.`);
+            }
         };
-        loadContent();
+
+        const loadBlogPosts = async () => {
+            try {
+                const posts = await getBlogPosts();
+                if (cancelled) return;
+                setBlogPosts(posts);
+            } catch (err) {
+                console.error('[SiteContent] Failed to load blog posts:', err);
+                if (cancelled) return;
+                setError(prev => prev ?? 'Failed to load blog posts.');
+            }
+        };
+
+        Promise.all([
+            load('quickLinks', setQuickLinks, initialQuickLinks),
+            load('legalPages', setLegalPagesContent, initialLegalPages),
+            loadBlogPosts(),
+            load('aboutPage', setAboutPageContent, initialAboutPageContent),
+            load('contactPage', setContactPageContent, initialContactPageContent),
+            load('careersPage', setCareersPageContent, initialCareersPageContent),
+            load('homepage', setHomepageContent, initialHomepageContent),
+            load('assets', setSiteAssets, initialSiteAssets),
+        ]);
+
+        return () => { cancelled = true; };
     }, []);
 
 
     const updateQuickLinks = useCallback(async (newLinks: QuickLink[]) => {
-        setQuickLinks(newLinks);
-        await saveSiteContent('quickLinks', { data: newLinks });
+        try {
+            // Plain array, no {data: [...]} wrapper — site_content.data stores
+            // the content value directly for every key, including this one.
+            await saveSiteContent('quickLinks', newLinks);
+            setQuickLinks(newLinks);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save quickLinks:', err);
+            setError('Failed to save quick links.');
+            throw err;
+        }
     }, []);
 
     const updateLegalPagesContent = useCallback(async (newContent: LegalPagesContent) => {
-        setLegalPagesContent(newContent);
-        await saveSiteContent('legalPages', newContent);
+        try {
+            await saveSiteContent('legalPages', newContent);
+            setLegalPagesContent(newContent);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save legalPages:', err);
+            setError('Failed to save legal pages.');
+            throw err;
+        }
     }, []);
 
-    const updateBlogPosts = useCallback(async (newPosts: BlogPost[]) => {
-        setBlogPosts(newPosts);
-        await saveSiteContent('blogPosts', { data: newPosts });
+    const saveBlogPost = useCallback(async (post: Partial<BlogPost> & { id?: string }) => {
+        try {
+            const id = await dbSaveBlogPost(post);
+            const saved: BlogPost = {
+                id,
+                title: post.title ?? '',
+                content: post.content ?? '',
+                imageUrl: post.imageUrl,
+                author: post.author ?? '',
+                publishDate: post.publishDate ?? new Date().toISOString(),
+            };
+            setBlogPosts(prev => {
+                const exists = prev.some(p => p.id === id);
+                return exists ? prev.map(p => (p.id === id ? saved : p)) : [saved, ...prev];
+            });
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save blog post:', err);
+            setError('Failed to save blog post.');
+            throw err;
+        }
+    }, []);
+
+    const deleteBlogPost = useCallback(async (id: string) => {
+        try {
+            await dbDeleteBlogPost(id);
+            setBlogPosts(prev => prev.filter(p => p.id !== id));
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to delete blog post:', err);
+            setError('Failed to delete blog post.');
+            throw err;
+        }
     }, []);
 
     const updateAboutPageContent = useCallback(async (newContent: AboutPageContent) => {
-        setAboutPageContent(newContent);
-        await saveSiteContent('aboutPage', newContent);
+        try {
+            await saveSiteContent('aboutPage', newContent);
+            setAboutPageContent(newContent);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save aboutPage:', err);
+            setError('Failed to save the About page.');
+            throw err;
+        }
     }, []);
 
     const updateContactPageContent = useCallback(async (newContent: ContactPageContent) => {
-        setContactPageContent(newContent);
-        await saveSiteContent('contactPage', newContent);
+        try {
+            await saveSiteContent('contactPage', newContent);
+            setContactPageContent(newContent);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save contactPage:', err);
+            setError('Failed to save the Contact page.');
+            throw err;
+        }
     }, []);
 
     const updateCareersPageContent = useCallback(async (newContent: CareersPageContent) => {
-        setCareersPageContent(newContent);
-        await saveSiteContent('careersPage', newContent);
+        try {
+            await saveSiteContent('careersPage', newContent);
+            setCareersPageContent(newContent);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save careersPage:', err);
+            setError('Failed to save the Careers page.');
+            throw err;
+        }
     }, []);
 
     const updateHomepageContent = useCallback(async (newContent: HomepageContent) => {
-        setHomepageContent(newContent);
-        await saveSiteContent('homepage', newContent);
+        try {
+            await saveSiteContent('homepage', newContent);
+            setHomepageContent(newContent);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save homepage:', err);
+            setError('Failed to save the homepage content.');
+            throw err;
+        }
     }, []);
 
     const updateSiteAssets = useCallback(async (newAssets: SiteAssets) => {
-        setSiteAssets(newAssets);
-        await saveSiteContent('assets', newAssets);
+        try {
+            await saveSiteContent('assets', newAssets);
+            setSiteAssets(newAssets);
+            setError(null);
+        } catch (err) {
+            console.error('[SiteContent] Failed to save site assets:', err);
+            setError('Failed to save site assets.');
+            throw err;
+        }
     }, []);
 
     const value = useMemo(() => ({
@@ -277,15 +360,17 @@ export const SiteContentProvider: React.FC<{ children: React.ReactNode }> = ({ c
         careersPageContent,
         homepageContent,
         siteAssets,
+        error,
         updateQuickLinks,
         updateLegalPagesContent,
-        updateBlogPosts,
+        saveBlogPost,
+        deleteBlogPost,
         updateAboutPageContent,
         updateContactPageContent,
         updateCareersPageContent,
         updateHomepageContent,
         updateSiteAssets,
-    }), [quickLinks, legalPagesContent, blogPosts, aboutPageContent, contactPageContent, careersPageContent, homepageContent, siteAssets, updateQuickLinks, updateLegalPagesContent, updateBlogPosts, updateAboutPageContent, updateContactPageContent, updateCareersPageContent, updateHomepageContent, updateSiteAssets]);
+    }), [quickLinks, legalPagesContent, blogPosts, aboutPageContent, contactPageContent, careersPageContent, homepageContent, siteAssets, error, updateQuickLinks, updateLegalPagesContent, saveBlogPost, deleteBlogPost, updateAboutPageContent, updateContactPageContent, updateCareersPageContent, updateHomepageContent, updateSiteAssets]);
 
     return (
         <SiteContentContext.Provider value={value}>

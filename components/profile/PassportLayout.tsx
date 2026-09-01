@@ -34,20 +34,28 @@ interface PassportLayoutProps {
 export default function PassportLayout({ profile, projects, certs, references, onEdit }: PassportLayoutProps) {
   const passportRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const handleDownloadPDF = () => {
     window.print();
   };
 
   const handleShare = () => {
-    const url = `${window.location.origin}/#/worker/profile/${profile.id}`;
+    // Router-safe link (no HashRouter '/#' prefix) now that the app uses BrowserRouter.
+    const url = `${window.location.origin}/worker/profile/${profile.id}`;
     navigator.clipboard.writeText(url).then(() => {
       setIsSharing(true);
+      setShareError(null);
       setTimeout(() => setIsSharing(false), 2000);
+    }).catch((err) => {
+      console.error('[PassportLayout] Failed to copy share link:', err);
+      setShareError('Could not copy link automatically. Please copy it from your browser address bar instead.');
+      setTimeout(() => setShareError(null), 5000);
     });
   };
 
-  // Calculate Profile Integrity Score
+  // Calculate Profile Completeness Score (a completeness/points count, not a
+  // third-party audit — see the "Profile Completeness Score" label below).
   const calculateScore = () => {
     let score = 50;
     if (profile.photo_url) score += 10;
@@ -65,12 +73,16 @@ export default function PassportLayout({ profile, projects, certs, references, o
   const getCertStatus = (dateString: string) => {
     if (!dateString) return { status: 'Valid', color: 'text-cyan-400', icon: BadgeCheck, bg: 'bg-cyan-950/80 border-cyan-800' };
     const expiry = new Date(dateString);
+    if (isNaN(expiry.getTime())) {
+      // Malformed/unparseable expiry date — don't silently label it as active.
+      return { status: 'Unverifiable', color: 'text-slate-400', icon: AlertTriangle, bg: 'bg-slate-800/80 border-slate-700' };
+    }
     const now = new Date();
     const monthsUntil = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30);
 
     if (expiry < now) return { status: 'Expired', color: 'text-red-400', icon: XCircle, bg: 'bg-red-950/80 border-red-800' };
     if (monthsUntil < 3) return { status: 'Expires Soon', color: 'text-yellow-400', icon: AlertTriangle, bg: 'bg-yellow-950/80 border-yellow-800' };
-    return { status: 'Verified Active', color: 'text-cyan-400', icon: BadgeCheck, bg: 'bg-cyan-950/80 border-cyan-800' };
+    return { status: 'Active', color: 'text-cyan-400', icon: BadgeCheck, bg: 'bg-cyan-950/80 border-cyan-800' };
   };
 
   // Helper to parse skills
@@ -109,7 +121,7 @@ export default function PassportLayout({ profile, projects, certs, references, o
               <h1 className="text-base font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-2">
                 Digital Skill Passport
                 <span className="text-[10px] font-mono font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-800/60 px-2 py-0.5 rounded-full">
-                  VERIFIED
+                  ACTIVE
                 </span>
               </h1>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{passportId}</span>
@@ -154,6 +166,11 @@ export default function PassportLayout({ profile, projects, certs, references, o
             </button>
           </div>
         </div>
+        {shareError && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-3">
+            <p className="text-xs text-red-600 dark:text-red-400 font-mono text-center md:text-right">{shareError}</p>
+          </div>
+        )}
       </div>
 
       <div ref={passportRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -240,10 +257,10 @@ export default function PassportLayout({ profile, projects, certs, references, o
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-extrabold text-white font-mono leading-none">{integrityScore}%</span>
-                  <span className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">Integrity</span>
+                  <span className="text-[10px] text-slate-400 font-mono uppercase mt-0.5">Complete</span>
                 </div>
               </div>
-              <p className="text-xs font-mono text-cyan-400 text-center">Top Tier Verification</p>
+              <p className="text-xs font-mono text-cyan-400 text-center">Profile Completeness Score</p>
               <p className="text-[10px] text-slate-500 text-center font-mono mt-0.5">Ready for 1-Click Placement</p>
             </div>
           </div>
@@ -339,7 +356,7 @@ export default function PassportLayout({ profile, projects, certs, references, o
               {secondarySkills.length > 0 && (
                 <div className="space-y-3">
                   {secondarySkills.map((skill, idx) => (
-                    <div key={idx} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div key={`${skill.trade}-${idx}`} className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div>
                         <h5 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">{skill.trade}</h5>
                         <div className="flex flex-wrap gap-1.5">
@@ -374,7 +391,7 @@ export default function PassportLayout({ profile, projects, certs, references, o
                   certs.map((cert, idx) => {
                     const { status, color, icon: Icon, bg } = getCertStatus(cert.expiry_date);
                     return (
-                      <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-cyan-500/50 transition-colors flex flex-col justify-between group">
+                      <div key={cert.id || `${cert.cert_name}-${idx}`} className="p-4 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800/80 hover:border-cyan-500/50 transition-colors flex flex-col justify-between group">
                         <div>
                           <div className="flex justify-between items-start mb-2">
                             <div className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border flex items-center gap-1 ${bg} ${color}`}>
@@ -419,7 +436,7 @@ export default function PassportLayout({ profile, projects, certs, references, o
                   <div className="pl-6 text-slate-500 text-sm italic">No past project history listed.</div>
                 ) : (
                   projects.map((proj, idx) => (
-                    <div key={idx} className="pl-6 relative group">
+                    <div key={proj.id || `${proj.project_name}-${idx}`} className="pl-6 relative group">
                       <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-950 border-2 border-cyan-500 group-hover:scale-125 transition-transform"></div>
                       <h4 className="text-base font-bold text-slate-900 dark:text-white">{proj.project_name}</h4>
                       <div className="flex flex-wrap gap-3 text-xs font-mono text-slate-500 dark:text-slate-400 mt-1 mb-2">

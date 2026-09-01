@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Job } from '../types';
-import { getJobs, getWorkerApplications } from '../services/db';
-import { db } from '../firebaseConfig';
-import { collection, addDoc } from 'firebase/firestore';
+import { getJobs, getWorkerApplications, createApplication } from '../services/db';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -240,23 +238,12 @@ const JobSearchPage: React.FC = () => {
         setApplyingId(job.id);
 
         try {
-            const applicationData = {
-                job_id: job.id,
-                jobTitle: job.title,
-                companyName: job.employer_name,
-                employer_id: job.employer_id,
-                worker_id: user.id,
-                status: 'applied',
-                appliedDate: new Date().toISOString().split('T')[0],
-                location: job.location
-            };
-
-            await addDoc(collection(db, 'applications'), applicationData);
+            await createApplication(job, user.id);
             setNotification({ message: "Application submitted successfully with verified Skill Passport!", type: 'success' });
             setAppliedJobIds(prev => new Set(prev).add(job.id));
         } catch (error: any) {
             console.error("Apply error:", error);
-            setNotification({ message: "Failed to apply. Please try again.", type: 'error' });
+            setNotification({ message: error.message || "Failed to apply. Please try again.", type: 'error' });
         } finally {
             setApplyingId(null);
             setTimeout(() => setNotification(null), 3500);

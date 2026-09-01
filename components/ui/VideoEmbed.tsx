@@ -4,10 +4,16 @@ import { VideoOff } from 'lucide-react';
 
 export default function VideoEmbed({ url, label }: { url?: string, label: string }) {
   const [isMounted, setIsMounted] = useState(false);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Reset the error state if a new URL is provided.
+  useEffect(() => {
+    setHasError(false);
+  }, [url]);
 
   if (!isMounted) return <div className="aspect-video bg-slate-700 animate-pulse rounded-lg" />;
 
@@ -16,6 +22,15 @@ export default function VideoEmbed({ url, label }: { url?: string, label: string
       <div className="aspect-video bg-slate-800 rounded-lg flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-700">
         <VideoOff size={32} className="mb-2" />
         <span className="text-sm font-medium">No {label} Video Provided</span>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="aspect-video bg-slate-800 rounded-lg flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-700">
+        <VideoOff size={32} className="mb-2" />
+        <span className="text-sm font-medium">This video is unavailable</span>
       </div>
     );
   }
@@ -29,6 +44,7 @@ export default function VideoEmbed({ url, label }: { url?: string, label: string
           height="100%"
           controls={true}
           light={true} // Shows thumbnail first
+          onError={() => setHasError(true)}
         />
       </div>
     </div>

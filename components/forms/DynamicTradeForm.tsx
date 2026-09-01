@@ -9,15 +9,19 @@ interface DynamicTradeFormProps {
     onSkillsChange: (skills: UserSkill[]) => void;
 }
 
+// Reasonable ceiling on how many trades a single profile can list.
+const MAX_SKILLS = 10;
+
 export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTradeFormProps) {
     // If no skills exist, default to adding mode
     const [isAdding, setIsAdding] = useState(skills.length === 0);
-    
+
     // Selector State for NEW skill being added
     const [activeSector, setActiveSector] = useState<Sector | null>(null);
     const [activeCategory, setActiveCategory] = useState<Category | null>(null);
     const [tempTrade, setTempTrade] = useState<string>('');
     const [tempTags, setTempTags] = useState<TradeSpecifics>({});
+    const [formError, setFormError] = useState<string | null>(null);
 
     // Helper to find trade object definition based on tempTrade name
     const currentTradeObj = useMemo(() => {
@@ -27,6 +31,17 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
 
     const handleAddSkill = () => {
         if (!tempTrade) return;
+
+        if (skills.length >= MAX_SKILLS) {
+            setFormError(`You can add up to ${MAX_SKILLS} skills.`);
+            return;
+        }
+
+        const isDuplicate = skills.some(s => s.trade.toLowerCase() === tempTrade.toLowerCase());
+        if (isDuplicate) {
+            setFormError(`"${tempTrade}" has already been added.`);
+            return;
+        }
 
         const newSkill: UserSkill = {
             trade: tempTrade,
@@ -44,6 +59,7 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
         setActiveCategory(null);
         setTempTrade('');
         setTempTags({});
+        setFormError(null);
     };
 
     const handleRemoveSkill = (index: number) => {
@@ -82,8 +98,8 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
             {skills.length > 0 && (
                 <div className="space-y-4">
                     {skills.map((skill, idx) => (
-                        <div 
-                            key={idx} 
+                        <div
+                            key={skill.trade}
                             className={`relative p-5 rounded-xl border-2 transition-all ${
                                 skill.isPrimary 
                                     ? 'border-emerald-500 bg-emerald-50/50 shadow-md' 
@@ -139,12 +155,18 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
 
             {/* --- Add Skill Button --- */}
             {!isAdding && (
-                <button 
-                    onClick={() => setIsAdding(true)}
-                    className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
-                >
-                    <Plus size={20} /> Add Another Skill
-                </button>
+                skills.length >= MAX_SKILLS ? (
+                    <p className="w-full py-3 text-center text-sm text-slate-400 italic">
+                        Maximum of {MAX_SKILLS} skills reached.
+                    </p>
+                ) : (
+                    <button
+                        onClick={() => { setFormError(null); setIsAdding(true); }}
+                        className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all flex items-center justify-center gap-2"
+                    >
+                        <Plus size={20} /> Add Another Skill
+                    </button>
+                )
             )}
 
             {/* --- Add New Skill Form (Steps 1-4) --- */}
@@ -264,7 +286,10 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
 
                         {/* Confirm Button */}
                         {tempTrade && (
-                            <div className="pt-4 flex justify-end">
+                            <div className="pt-4 flex flex-col items-end gap-2">
+                                {formError && (
+                                    <p className="text-sm text-red-500 font-medium">{formError}</p>
+                                )}
                                 <button
                                     onClick={handleAddSkill}
                                     className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-800 transition-colors flex items-center gap-2"
