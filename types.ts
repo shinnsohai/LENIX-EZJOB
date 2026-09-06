@@ -127,6 +127,17 @@ export interface Job {
     salary_max: number;
     currency?: string; // Currency code (e.g., 'SGD', 'USD', 'MYR')
     createdAt?: string;
+
+    // Mobile-first fields for blue-collar/shift-based applicants (all optional
+    // so existing jobs and forms keep working unchanged).
+    shift_schedule?: string; // e.g. "12-hour rotating shifts, 6-day week, night allowance"
+    perks?: string; // e.g. "Daily meal allowance, 1.5x OT, performance bonus"
+    whatsapp_number?: string; // E.164 phone number for a "WhatsApp to apply" CTA
+    qualifying_questions?: string[]; // 2-3 short screening questions shown before Apply
+    transport_provided?: boolean;
+    transport_details?: string; // pickup points / shuttle info
+    accommodation_provided?: boolean;
+    accommodation_details?: string; // dormitory / housing allowance info
 }
 
 export interface Application {

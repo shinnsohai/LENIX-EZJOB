@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
-import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
+import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home } from 'lucide-react';
 
 const TRADE_CATEGORIES = [
     'All Roles',
@@ -80,6 +80,26 @@ const JobCard: React.FC<{
                             ${job.salary_min ? job.salary_min.toLocaleString() : '0'} - ${job.salary_max ? job.salary_max.toLocaleString() : '0'} / mo
                         </span>
                     </div>
+                    {job.shift_schedule && (
+                        <div className="flex items-center gap-1.5">
+                            <Clock size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <span className="truncate">{job.shift_schedule}</span>
+                        </div>
+                    )}
+                    {(job.transport_provided || job.accommodation_provided) && (
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {job.transport_provided && (
+                                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                                    <Bus size={14} className="text-cyan-600 dark:text-cyan-400" /> Transport
+                                </span>
+                            )}
+                            {job.accommodation_provided && (
+                                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                                    <Home size={14} className="text-cyan-600 dark:text-cyan-400" /> Housing
+                                </span>
+                            )}
+                        </div>
+                    )}
                     {job.createdAt && (
                         <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[11px]">
                             <Calendar size={13} />

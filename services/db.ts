@@ -224,6 +224,14 @@ const rowToJob = (row: any): Job => ({
     salary_max: row.salary_max,
     currency: row.currency,
     createdAt: row.created_at,
+    shift_schedule: row.shift_schedule ?? undefined,
+    perks: row.perks ?? undefined,
+    whatsapp_number: row.whatsapp_number ?? undefined,
+    qualifying_questions: row.qualifying_questions ?? [],
+    transport_provided: row.transport_provided ?? false,
+    transport_details: row.transport_details ?? undefined,
+    accommodation_provided: row.accommodation_provided ?? false,
+    accommodation_details: row.accommodation_details ?? undefined,
 });
 
 /**

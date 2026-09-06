@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getJobById, getWorkerApplications, createApplication } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/Spinner';
-import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle } from 'lucide-react';
+import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift } from 'lucide-react';
 import { UserRole } from '../types';
 import type { Job } from '../types';
 
@@ -16,6 +16,9 @@ export default function JobDetailPage() {
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
+    // Qualifying questions act as a lightweight screening checklist in place
+    // of a cover letter — candidates confirm each one before applying.
+    const [confirmedQuestions, setConfirmedQuestions] = useState<Set<number>>(new Set());
 
     const fetchJob = useCallback(async () => {
         if (!id) return;
@@ -75,6 +78,23 @@ export default function JobDetailPage() {
             navigate(`/employer/profile/${job.employer_id}`);
         }
     };
+
+    const toggleQuestion = (index: number) => {
+        setConfirmedQuestions(prev => {
+            const next = new Set(prev);
+            if (next.has(index)) next.delete(index); else next.add(index);
+            return next;
+        });
+    };
+
+    const questions = job?.qualifying_questions ?? [];
+    const allQuestionsConfirmed = questions.length === 0 || confirmedQuestions.size === questions.length;
+
+    const whatsappHref = job?.whatsapp_number
+        ? `https://wa.me/${job.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+              `Hi, I'd like to apply for the ${job.title} position${job.employer_name ? ` at ${job.employer_name}` : ''}.`
+          )}`
+        : null;
 
     if (loading) {
         return (
@@ -140,30 +160,95 @@ export default function JobDetailPage() {
                                         {job.status}
                                     </span>
                                 </div>
+                                {job.shift_schedule && (
+                                    <div className="flex items-center gap-2">
+                                        <Clock size={18} />
+                                        <span>{job.shift_schedule}</span>
+                                    </div>
+                                )}
+                                {job.transport_provided && (
+                                    <div className="flex items-center gap-2">
+                                        <Bus size={18} />
+                                        <span>{job.transport_details || 'Transport provided'}</span>
+                                    </div>
+                                )}
+                                {job.accommodation_provided && (
+                                    <div className="flex items-center gap-2">
+                                        <Home size={18} />
+                                        <span>{job.accommodation_details || 'Accommodation provided'}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Apply Button */}
-                    <button
-                        onClick={handleApply}
-                        disabled={applying || hasApplied}
-                        className={`w-full py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied
-                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                            }`}
-                    >
-                        {hasApplied ? (
-                            <>
-                                <CheckCircle size={20} className="inline mr-2" />
-                                Already Applied
-                            </>
-                        ) : applying ? (
-                            'Submitting...'
-                        ) : (
-                            'Apply for this Position'
+                    {/* Perks & Allowances */}
+                    {job.perks && (
+                        <div className="flex items-start gap-2 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
+                            <Gift size={18} className="mt-0.5 flex-shrink-0" />
+                            <span className="text-sm font-medium">{job.perks}</span>
+                        </div>
+                    )}
+
+                    {/* Qualifying Questions — confirm-to-apply checklist, replaces a cover letter */}
+                    {questions.length > 0 && (
+                        <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                            <h3 className="text-sm font-bold text-slate-900 mb-2">Before you apply, confirm:</h3>
+                            <div className="space-y-2">
+                                {questions.map((q, i) => (
+                                    <label key={i} className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={confirmedQuestions.has(i)}
+                                            onChange={() => toggleQuestion(i)}
+                                            className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                        />
+                                        <span>{q}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Apply Button(s) */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                            onClick={handleApply}
+                            disabled={applying || hasApplied || !allQuestionsConfirmed}
+                            title={!allQuestionsConfirmed ? 'Confirm the questions above to apply' : undefined}
+                            className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied || !allQuestionsConfirmed
+                                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                }`}
+                        >
+                            {hasApplied ? (
+                                <>
+                                    <CheckCircle size={20} className="inline mr-2" />
+                                    Already Applied
+                                </>
+                            ) : applying ? (
+                                'Submitting...'
+                            ) : (
+                                'Apply for this Position'
+                            )}
+                        </button>
+                        {whatsappHref && (
+                            <a
+                                href={whatsappHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-disabled={!allQuestionsConfirmed}
+                                onClick={(e) => { if (!allQuestionsConfirmed) e.preventDefault(); }}
+                                className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors flex items-center justify-center gap-2 ${!allQuestionsConfirmed
+                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                        : 'bg-[#25D366] text-white hover:bg-[#1ebc59]'
+                                    }`}
+                            >
+                                <MessageCircle size={20} />
+                                WhatsApp to Apply
+                            </a>
                         )}
-                    </button>
+                    </div>
                 </div>
 
                 {/* Job Description */}
@@ -190,11 +275,12 @@ export default function JobDetailPage() {
                 </div>
 
                 {/* Apply Button (Bottom) */}
-                <div className="mt-8">
+                <div className="mt-8 flex flex-col sm:flex-row gap-3">
                     <button
                         onClick={handleApply}
-                        disabled={applying || hasApplied}
-                        className={`w-full py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied
+                        disabled={applying || hasApplied || !allQuestionsConfirmed}
+                        title={!allQuestionsConfirmed ? 'Confirm the questions above to apply' : undefined}
+                        className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied || !allQuestionsConfirmed
                                 ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                                 : 'bg-emerald-600 text-white hover:bg-emerald-700'
                             }`}
@@ -210,6 +296,22 @@ export default function JobDetailPage() {
                             'Apply for this Position'
                         )}
                     </button>
+                    {whatsappHref && (
+                        <a
+                            href={whatsappHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-disabled={!allQuestionsConfirmed}
+                            onClick={(e) => { if (!allQuestionsConfirmed) e.preventDefault(); }}
+                            className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors flex items-center justify-center gap-2 ${!allQuestionsConfirmed
+                                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
+                                    : 'bg-[#25D366] text-white hover:bg-[#1ebc59]'
+                                }`}
+                        >
+                            <MessageCircle size={20} />
+                            WhatsApp to Apply
+                        </a>
+                    )}
                 </div>
             </div>
         </div>

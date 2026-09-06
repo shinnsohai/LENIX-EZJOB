@@ -31,6 +31,14 @@ const EMPTY_JOB_FORM = {
     salary_max: '',
     description: '',
     required_skills: '',
+    shift_schedule: '',
+    perks: '',
+    whatsapp_number: '',
+    qualifying_questions: '', // newline-separated in the form, up to 3 questions
+    transport_provided: false,
+    transport_details: '',
+    accommodation_provided: false,
+    accommodation_details: '',
 };
 
 const SearchWorkersPanel: React.FC = () => {
@@ -522,6 +530,12 @@ const EmployerDashboard: React.FC = () => {
                 }
             }
 
+            const qualifying_questions = jobForm.qualifying_questions
+                .split('\n')
+                .map(q => q.trim())
+                .filter(Boolean)
+                .slice(0, 3);
+
             const newJob: Omit<Job, 'id'> = {
                 employer_id: user.id,
                 employer_name: company,
@@ -533,7 +547,15 @@ const EmployerDashboard: React.FC = () => {
                 country,
                 salary_min,
                 salary_max,
-                currency: currency.code // Add currency code
+                currency: currency.code, // Add currency code
+                shift_schedule: jobForm.shift_schedule.trim() || undefined,
+                perks: jobForm.perks.trim() || undefined,
+                whatsapp_number: jobForm.whatsapp_number.trim() || undefined,
+                qualifying_questions,
+                transport_provided: jobForm.transport_provided,
+                transport_details: jobForm.transport_details.trim() || undefined,
+                accommodation_provided: jobForm.accommodation_provided,
+                accommodation_details: jobForm.accommodation_details.trim() || undefined,
             };
 
             console.log("Creating job in DB:", newJob);
@@ -578,6 +600,18 @@ const EmployerDashboard: React.FC = () => {
                 currency: currency.code, // Add currency code
                 description: jobForm.description,
                 required_skills: jobForm.required_skills.split(',').map(s => s.trim()).filter(Boolean),
+                shift_schedule: jobForm.shift_schedule.trim() || undefined,
+                perks: jobForm.perks.trim() || undefined,
+                whatsapp_number: jobForm.whatsapp_number.trim() || undefined,
+                qualifying_questions: jobForm.qualifying_questions
+                    .split('\n')
+                    .map(q => q.trim())
+                    .filter(Boolean)
+                    .slice(0, 3),
+                transport_provided: jobForm.transport_provided,
+                transport_details: jobForm.transport_details.trim() || undefined,
+                accommodation_provided: jobForm.accommodation_provided,
+                accommodation_details: jobForm.accommodation_details.trim() || undefined,
             };
 
             await updateJob(selectedJob.id, updatedData);
@@ -601,6 +635,14 @@ const EmployerDashboard: React.FC = () => {
             salary_max: String(job.salary_max ?? ''),
             description: job.description,
             required_skills: (job.required_skills ?? []).join(', '),
+            shift_schedule: job.shift_schedule ?? '',
+            perks: job.perks ?? '',
+            whatsapp_number: job.whatsapp_number ?? '',
+            qualifying_questions: (job.qualifying_questions ?? []).join('\n'),
+            transport_provided: job.transport_provided ?? false,
+            transport_details: job.transport_details ?? '',
+            accommodation_provided: job.accommodation_provided ?? false,
+            accommodation_details: job.accommodation_details ?? '',
         });
         setView('EDIT_JOB');
     };
@@ -1309,6 +1351,72 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         placeholder="e.g., Plumbing, Pipe Fitting, Blueprint Reading"
                                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
                                     />
+                                </div>
+
+                                {/* Mobile Applicant Essentials — surfaced up top as scannable bullets
+                                    on the public job card/detail page, and as a WhatsApp quick-apply
+                                    path for candidates without a formatted resume on hand. */}
+                                <div className="pt-6 border-t border-gray-200">
+                                    <h3 className="text-lg font-bold text-gray-900 mb-1">Mobile Applicant Essentials</h3>
+                                    <p className="text-sm text-gray-500 mb-4">
+                                        Optional, but strongly recommended for shift and site-based roles — most candidates apply from their phone between shifts.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label htmlFor="shift_schedule" className="block text-sm font-medium text-gray-700">Shift Schedule</label>
+                                            <input type="text" name="shift_schedule" id="shift_schedule" value={jobForm.shift_schedule} onChange={e => setJobForm({ ...jobForm, shift_schedule: e.target.value })} placeholder="e.g., 12-hour rotating shifts, 6-day week, night allowance" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="perks" className="block text-sm font-medium text-gray-700">Perks & Allowances</label>
+                                            <input type="text" name="perks" id="perks" value={jobForm.perks} onChange={e => setJobForm({ ...jobForm, perks: e.target.value })} placeholder="e.g., Daily meal allowance, 1.5x OT, attendance bonus" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6">
+                                        <label htmlFor="whatsapp_number" className="block text-sm font-medium text-gray-700">
+                                            WhatsApp Quick-Apply Number <span className="text-gray-500">(optional)</span>
+                                        </label>
+                                        <input type="text" name="whatsapp_number" id="whatsapp_number" value={jobForm.whatsapp_number} onChange={e => setJobForm({ ...jobForm, whatsapp_number: e.target.value })} placeholder="e.g., +65 8123 4567" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <p className="mt-1 text-xs text-gray-500">Candidates get a "Message on WhatsApp" button on the job page, pre-filled with their name and this role.</p>
+                                    </div>
+
+                                    <div className="mt-6">
+                                        <label htmlFor="qualifying_questions" className="block text-sm font-medium text-gray-700">
+                                            Qualifying Questions <span className="text-gray-500">(one per line, up to 3)</span>
+                                        </label>
+                                        <textarea
+                                            name="qualifying_questions"
+                                            id="qualifying_questions"
+                                            rows={3}
+                                            value={jobForm.qualifying_questions}
+                                            onChange={e => setJobForm({ ...jobForm, qualifying_questions: e.target.value })}
+                                            placeholder={'Do you have a valid lifting supervisor certificate?\nCan you start within 14 days?'}
+                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                                        ></textarea>
+                                        <p className="mt-1 text-xs text-gray-500">Shown as a short checklist candidates confirm before applying — replaces the cover letter.</p>
+                                    </div>
+
+                                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                                <input type="checkbox" checked={jobForm.transport_provided} onChange={e => setJobForm({ ...jobForm, transport_provided: e.target.checked })} className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                                Company Transport Provided
+                                            </label>
+                                            {jobForm.transport_provided && (
+                                                <input type="text" value={jobForm.transport_details} onChange={e => setJobForm({ ...jobForm, transport_details: e.target.value })} placeholder="e.g., Shuttle from Woodlands MRT, 6am/6pm" className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                                <input type="checkbox" checked={jobForm.accommodation_provided} onChange={e => setJobForm({ ...jobForm, accommodation_provided: e.target.checked })} className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                                Accommodation Provided
+                                            </label>
+                                            {jobForm.accommodation_provided && (
+                                                <input type="text" value={jobForm.accommodation_details} onChange={e => setJobForm({ ...jobForm, accommodation_details: e.target.value })} placeholder="e.g., Dormitory on-site, or housing allowance" className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500" />
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="flex justify-end">
