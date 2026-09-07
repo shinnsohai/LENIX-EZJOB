@@ -14,10 +14,19 @@ export const useAuth = () => {
     return context;
 };
 
+// Set by signInWithGoogle() right before the OAuth redirect, when the user
+// picked a role on the register screen. Read back once, after the OAuth
+// round-trip lands and a session exists, to apply that choice -- see
+// applyPendingOAuthRole() below. Google (or any OAuth provider) has no way
+// for us to pass this through the redirect itself, so sessionStorage is the
+// bridge; it's per-tab and cleared on success, so a stale value can't leak
+// into an unrelated later sign-in in the same tab.
+const PENDING_OAUTH_ROLE_KEY = 'ezjob_pending_oauth_role';
+
 // Fetches the public.profiles row for a freshly-authenticated Supabase user.
 // Right after sign-up there can be a brief race with the `handle_new_user`
 // trigger that populates this row, so we retry a few times before giving up.
-const fetchProfile = async (userId: string, retries = 3, delayMs = 400): Promise<User | null> => {
+const fetchProfile = async (userId: string, retries = 3, delayMs = 400): Promise<(User & { role_locked: boolean }) | null> => {
     for (let attempt = 0; attempt <= retries; attempt++) {
         const { data, error } = await supabase
             .from('profiles')
@@ -30,6 +39,7 @@ const fetchProfile = async (userId: string, retries = 3, delayMs = 400): Promise
                 id: data.id,
                 identifier: data.identifier,
                 role: data.role as UserRole,
+                role_locked: data.role_locked,
             };
         }
 
@@ -38,6 +48,53 @@ const fetchProfile = async (userId: string, retries = 3, delayMs = 400): Promise
         }
     }
     return null;
+};
+
+// If this OAuth sign-in is brand new (role_locked = false, meaning
+// handle_new_user() had no explicit role to assign) and the register screen
+// stashed an intended role before redirecting, apply it now. This is the
+// one-time self-service correction the 0007 migration's trigger allows --
+// after this write, role_locked flips to true and the choice is final
+// (same as everyone who registered with email/password).
+const applyPendingOAuthRole = async (profile: User & { role_locked: boolean }): Promise<User> => {
+    const { role_locked, ...user } = profile;
+    if (role_locked) return user;
+
+    let pending: string | null = null;
+    try {
+        pending = sessionStorage.getItem(PENDING_OAUTH_ROLE_KEY);
+    } catch {
+        // sessionStorage unavailable (private mode edge cases) -- nothing to apply.
+        return user;
+    }
+
+    if (pending !== UserRole.WORKER && pending !== UserRole.EMPLOYER) {
+        return user;
+    }
+
+    // Runs even when `pending` already equals the default WORKER role --
+    // the point of this write isn't just the role, it's also flipping
+    // role_locked to true so this branch isn't re-entered on every future
+    // sign-in.
+    const { data, error } = await supabase
+        .from('profiles')
+        .update({ role: pending, role_locked: true })
+        .eq('id', profile.id)
+        .select('*')
+        .single();
+
+    if (error || !data) {
+        console.error('AuthContext: failed to apply pending OAuth role selection', error);
+        return user; // leave the pending key in place; a later attempt in this tab can retry
+    }
+
+    try {
+        sessionStorage.removeItem(PENDING_OAUTH_ROLE_KEY);
+    } catch {
+        // Non-fatal -- worst case the key lingers until the tab closes.
+    }
+
+    return { id: data.id, identifier: data.identifier, role: data.role as UserRole };
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -56,9 +113,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        let profile: User | null = null;
+        let user: User | null = null;
         try {
-            profile = await fetchProfile(session.user.id);
+            const profile = await fetchProfile(session.user.id);
+            if (profile) {
+                user = await applyPendingOAuthRole(profile);
+            }
         } catch (error) {
             console.error('AuthContext: failed to fetch profile', error);
         }
@@ -68,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        setUser(profile);
+        setUser(user);
         setLoading(false);
     };
 
@@ -129,6 +189,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { needsEmailConfirmation: !data.session };
     };
 
+    // `intendedRole` matters only for a brand-new account (register screen
+    // passes the Worker/Employer toggle's current value); omit it for a
+    // plain "Continue with Google" login where the account, if it already
+    // exists, already has a role. Google immediately navigates the browser
+    // away, so there's nothing meaningful to return here besides a thrown
+    // error for the (rare) case the redirect itself can't start.
+    const signInWithGoogle = async (intendedRole?: UserRole) => {
+        try {
+            if (intendedRole) {
+                sessionStorage.setItem(PENDING_OAUTH_ROLE_KEY, intendedRole);
+            } else {
+                sessionStorage.removeItem(PENDING_OAUTH_ROLE_KEY);
+            }
+        } catch {
+            // sessionStorage unavailable -- proceed anyway; worst case a new
+            // OAuth signup lands as the default WORKER role, correctable by
+            // an admin.
+        }
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: `${window.location.origin}/login` },
+        });
+
+        if (error) {
+            throw error;
+        }
+    };
+
     const logout = async () => {
         const { error } = await supabase.auth.signOut();
         if (error) {
@@ -138,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, register, logout, signInWithGoogle }}>
             {!loading && children}
         </AuthContext.Provider>
     );

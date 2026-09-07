@@ -16,13 +16,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     const [role, setRole] = useState<UserRole>(UserRole.WORKER);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [awaitingRedirect, setAwaitingRedirect] = useState(false);
     // Set when registration succeeds but the Supabase project requires email
     // confirmation (no session comes back yet) -- shows a "check your email"
     // state instead of silently sitting on the form forever.
     const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
 
-    const { login, register, user } = useAuth();
+    const { login, register, user, signInWithGoogle } = useAuth();
     const { isDark } = useTheme();
     const { siteAssets } = useSiteContent();
     const navigate = useNavigate();
@@ -38,11 +37,15 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     const lenixLogoSrc = isDark ? '/assets/lenix-logo-dark.jpeg' : '/assets/lenix-logo-light.png';
     const ezjobLogoSrc = isDark ? '/assets/ezjob-logo-dark.png' : '/assets/ezjob-logo-light.png';
 
-    // Once login/register resolves, wait for AuthContext to finish loading the
-    // real profile (with its authoritative role) before redirecting, instead of
-    // re-parsing the raw identifier string.
+    // Redirect once a resolved user is present -- covers both a just-completed
+    // email/password login/register on this page (awaitingRedirect) and a
+    // Google OAuth round-trip landing back on /login with a session already
+    // established (no awaitingRedirect involved, since that's a fresh mount
+    // of this component after the redirect). Also means visiting /login or
+    // /register while already authenticated just bounces you to your
+    // dashboard instead of showing the form again -- the more useful behavior.
     useEffect(() => {
-        if (!awaitingRedirect || !user) {
+        if (!user) {
             return;
         }
 
@@ -52,7 +55,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
             '/worker/dashboard';
 
         navigate(destination, { replace: true });
-    }, [awaitingRedirect, user, navigate]);
+    }, [user, navigate]);
+
+    const handleGoogleSignIn = async () => {
+        setError('');
+        setIsLoading(true);
+        try {
+            await signInWithGoogle(isRegister ? role : undefined);
+            // No further action here -- signInWithGoogle() redirects the
+            // browser to Google immediately on success.
+        } catch (err: any) {
+            console.error(err);
+            setError(err.message || 'Failed to start Google sign-in.');
+            setIsLoading(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -82,7 +99,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
             } else {
                 await login(identifier, password);
             }
-            setAwaitingRedirect(true);
+            // No explicit redirect call here -- the effect above fires once
+            // AuthContext resolves `user` from the new session.
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'Failed to authenticate. Please check your credentials.');
@@ -250,6 +268,27 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                             </button>
                         </div>
                     </form>
+
+                    <div className="flex items-center gap-3 my-5">
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800"></div>
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">Or</span>
+                        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800"></div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={isLoading}
+                        className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-mono text-xs font-bold rounded-xl transition-all hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                            <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+                            <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+                            <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+                            <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+                        </svg>
+                        Continue with Google
+                    </button>
 
                     <div className="text-center mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 font-mono text-xs text-slate-500 dark:text-slate-400">
                         {isRegister ? "Already registered?" : "Don't have an account yet?"}

@@ -17,6 +17,8 @@ export interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string, role: UserRole) => Promise<{ needsEmailConfirmation: boolean }>;
     logout: () => Promise<void>;
+    /** Redirects to Google immediately; there's no meaningful resolved value, only a thrown error if the redirect itself couldn't start. `intendedRole` matters only for a brand-new account (pass the register screen's current Worker/Employer selection); omit for a plain "Continue with Google" login. */
+    signInWithGoogle: (intendedRole?: UserRole) => Promise<void>;
 }
 
 export interface PhysicalAttributes {
