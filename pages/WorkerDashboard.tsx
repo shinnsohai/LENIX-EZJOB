@@ -345,8 +345,8 @@ export default function WorkerDashboard() {
         return (
             <div className="flex flex-col justify-center items-center min-h-screen px-4 text-center">
                 <AlertTriangle size={40} className="text-red-500 mb-3" />
-                <h2 className="text-xl font-bold text-slate-800 mb-2">Couldn't load your profile</h2>
-                <p className="text-slate-500 mb-6 max-w-md">{error}</p>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Couldn't load your profile</h2>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-md">{error}</p>
                 <button
                     onClick={() => loadData()}
                     className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700"
@@ -380,27 +380,45 @@ export default function WorkerDashboard() {
 
             {/* Header */}
             <div className="flex justify-between items-center mb-8">
-                <h1 className="text-2xl font-bold text-slate-800">Edit Your Profile</h1>
-                <button onClick={() => setIsEditing(false)} className="text-slate-500 hover:text-slate-800">Cancel</button>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Edit Your Profile</h1>
+                <button onClick={() => setIsEditing(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors">Cancel</button>
             </div>
 
             {/* Wizard Progress */}
-            <div className="flex justify-between mb-8 text-sm font-medium text-slate-400 relative">
-                <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-200 -z-10"></div>
-                {[1, 2, 3, 4, 5].map(i => (
-                    <button
-                        key={i}
-                        onClick={() => setStep(i)}
-                        className={`flex items-center justify-center w-8 h-8 rounded-full border-2 bg-white transition-colors ${step >= i ? 'border-emerald-600 text-emerald-600' : 'border-slate-300 text-slate-300'
+            <div className="mb-2 relative">
+                <div className="flex justify-between text-sm font-medium relative">
+                    {/* Track */}
+                    <div className="absolute top-1/2 left-0 w-full h-0.5 -translate-y-1/2 bg-slate-200 dark:bg-slate-700 -z-10"></div>
+                    {/* Animated fill, showing progress up to the current step */}
+                    <div
+                        className="absolute top-1/2 left-0 h-0.5 -translate-y-1/2 bg-emerald-500 -z-10 transition-all duration-500 ease-out"
+                        style={{ width: `${((step - 1) / 4) * 100}%` }}
+                    ></div>
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <button
+                            key={i}
+                            onClick={() => setStep(i)}
+                            aria-label={`Go to step ${i}`}
+                            aria-current={step === i ? 'step' : undefined}
+                            className={`flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-full border-2 font-bold transition-all duration-300 touch-manipulation ${
+                                step === i
+                                    ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-500/30 scale-110 ring-4 ring-emerald-500/20 animate-pulse'
+                                    : step > i
+                                    ? 'border-emerald-600 bg-white dark:bg-slate-900 text-emerald-600'
+                                    : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500'
                             }`}
-                    >
-                        {i}
-                    </button>
-                ))}
+                        >
+                            {i}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div className="mb-6 text-center">
-                <h2 className="text-xl font-bold text-slate-800">
+                <span className="sm:hidden inline-block text-[11px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1">
+                    Step {step} of 5
+                </span>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">
                     {step === 1 && 'The Basics'}
                     {step === 2 && 'Trade Expertise'}
                     {step === 3 && 'Skill Demo (Videos)'}
@@ -411,11 +429,11 @@ export default function WorkerDashboard() {
 
             {/* --- Step 1: Basics --- */}
             {step === 1 && (
-                <div className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
                         <input
-                            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none"
                             placeholder="e.g. John Doe"
                             value={profile.full_name}
                             onChange={e => setProfile({ ...profile, full_name: e.target.value })}
@@ -424,9 +442,9 @@ export default function WorkerDashboard() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Country of Origin</label>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Country of Origin</label>
                             <select
-                                className="w-full p-3 border rounded-lg bg-white"
+                                className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                                 value={profile.country_of_origin}
                                 onChange={e => setProfile({ ...profile, country_of_origin: e.target.value })}
                             >
@@ -435,10 +453,10 @@ export default function WorkerDashboard() {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Exp. in Host Country (Years)</label>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Exp. in Host Country (Years)</label>
                             <input
                                 type="number"
-                                className="w-full p-3 border rounded-lg"
+                                className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                                 value={profile.experience_in_country}
                                 onChange={e => setProfile({ ...profile, experience_in_country: parseInt(e.target.value) || 0 })}
                             />
@@ -446,40 +464,40 @@ export default function WorkerDashboard() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Short Bio / About Me</label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Short Bio / About Me</label>
                         <textarea
-                            className="w-full p-3 border rounded-lg h-32"
+                            className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg h-32 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             placeholder="Tell employers about yourself..."
                             value={profile.bio}
                             onChange={e => setProfile({ ...profile, bio: e.target.value })}
                         />
                     </div>
 
-                    <div className="border-t pt-4 mt-4">
-                        <h3 className="font-medium text-slate-800 mb-3">Physical Attributes</h3>
+                    <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mt-4">
+                        <h3 className="font-medium text-slate-800 dark:text-white mb-3">Physical Attributes</h3>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">Height (cm)</label>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Height (cm)</label>
                                 <input
                                     type="number"
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                                     value={profile.physical_attributes?.height_cm || ''}
                                     onChange={e => setProfile({ ...profile, physical_attributes: { ...profile.physical_attributes, height_cm: parseInt(e.target.value) } })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">Weight (kg)</label>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Weight (kg)</label>
                                 <input
                                     type="number"
-                                    className="w-full p-2 border rounded"
+                                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                                     value={profile.physical_attributes?.weight_kg || ''}
                                     onChange={e => setProfile({ ...profile, physical_attributes: { ...profile.physical_attributes, weight_kg: parseInt(e.target.value) } })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-500 mb-1">Color Blind?</label>
+                                <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Color Blind?</label>
                                 <select
-                                    className="w-full p-2 border rounded bg-white"
+                                    className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                                     value={profile.physical_attributes?.color_blindness ? 'yes' : 'no'}
                                     onChange={e => setProfile({ ...profile, physical_attributes: { ...profile.physical_attributes, color_blindness: e.target.value === 'yes' } })}
                                 >
@@ -494,20 +512,20 @@ export default function WorkerDashboard() {
 
             {/* --- Step 2: Trade (Using New Dynamic Form) --- */}
             {step === 2 && (
-                <div className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Total Years Experience</label>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Total Years Experience</label>
                         <input
                             type="number"
-                            className="w-full p-3 border rounded-lg"
+                            className="w-full p-3 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                             value={profile.experience_years}
                             onChange={e => setProfile({ ...profile, experience_years: parseInt(e.target.value) || 0 })}
                         />
                     </div>
 
-                    <div className="border-t border-slate-100 pt-6">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4">Skills & Expertise</h3>
-                        <p className="text-sm text-slate-500 mb-6">Add your primary trade first, then any secondary skills.</p>
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-6">
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Skills & Expertise</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Add your primary trade first, then any secondary skills.</p>
                         <DynamicTradeForm
                             skills={profile.skills || []}
                             onSkillsChange={handleSkillsChange}
@@ -518,8 +536,8 @@ export default function WorkerDashboard() {
 
             {/* --- Step 3: Videos --- */}
             {step === 3 && (
-                <div className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 border border-blue-100">
+                <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-lg text-sm text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-900">
                         <strong>Pro Tip:</strong> Upload your videos to YouTube, TikTok, or Facebook first, then paste the link here.
                     </div>
 
@@ -541,12 +559,12 @@ export default function WorkerDashboard() {
 
             {/* --- Step 4: Docs --- */}
             {step === 4 && (
-                <div className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
 
                     {/* NEW CV SECTION */}
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-                        <h3 className="font-bold text-lg mb-2">Curriculum Vitae (CV)</h3>
-                        <p className="text-sm text-slate-500 mb-4">Upload your resume/CV to let employers know more about you.</p>
+                    <div className="bg-slate-50 dark:bg-slate-950/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800 mb-6">
+                        <h3 className="font-bold text-lg mb-2 text-slate-800 dark:text-white">Curriculum Vitae (CV)</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Upload your resume/CV to let employers know more about you.</p>
 
                         <div className="flex items-center gap-4">
                             <div className="flex-grow">
@@ -555,14 +573,14 @@ export default function WorkerDashboard() {
                                     type="file"
                                     accept=".pdf,.doc,.docx"
                                     onChange={handleCVUpload}
-                                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-white file:text-emerald-700 hover:file:bg-emerald-50 border border-slate-300 rounded-lg cursor-pointer"
+                                    className="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-white dark:file:bg-slate-800 file:text-emerald-700 dark:file:text-emerald-400 hover:file:bg-emerald-50 dark:hover:file:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer"
                                 />
                             </div>
                         </div>
 
                         {profile.cv_url && (
-                            <div className="mt-4 flex items-center justify-between bg-white p-3 rounded-lg border border-emerald-200">
-                                <div className="flex items-center gap-2 text-emerald-700">
+                            <div className="mt-4 flex items-center justify-between bg-white dark:bg-slate-900 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                                     <FileCheck size={20} />
                                     <span className="font-medium text-sm">CV Uploaded</span>
                                 </div>
@@ -571,13 +589,13 @@ export default function WorkerDashboard() {
                                         href={profile.cv_url}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="text-sm text-emerald-600 hover:underline font-medium"
+                                        className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
                                     >
                                         View
                                     </a>
                                     <button
                                         onClick={() => setProfile({ ...profile, cv_url: '' })}
-                                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                                        className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                                         title="Remove CV"
                                     >
                                         <Trash2 size={18} />
@@ -587,40 +605,40 @@ export default function WorkerDashboard() {
                         )}
                     </div>
 
-                    <h3 className="font-bold text-lg">Add Certifications</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Add Certifications</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950/50 p-4 rounded-lg">
                         <input
-                            className="p-2 border rounded"
+                            className="p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             placeholder="Certificate Name (e.g. CSOC)"
                             value={newCert.cert_name || ''}
                             onChange={e => setNewCert({ ...newCert, cert_name: e.target.value })}
                         />
                         <input
                             type="date"
-                            className="p-2 border rounded"
+                            className="p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                             value={newCert.expiry_date || ''}
                             onChange={e => setNewCert({ ...newCert, expiry_date: e.target.value })}
                         />
                         <div className="md:col-span-2">
-                            <label className="block text-xs text-slate-500 mb-1">Upload Document (Image/PDF) - Max 2MB</label>
+                            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Upload Document (Image/PDF) - Max 2MB</label>
                             <input
                                 type="file"
                                 id="cert-file-input"
                                 onChange={e => e.target.files && setCertFile(e.target.files[0])}
-                                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                                className="block w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-950/50 file:text-emerald-700 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-900/50"
                             />
                         </div>
-                        <button onClick={handleAddCert} className="md:col-span-2 bg-slate-800 text-white py-2 rounded hover:bg-slate-900">
+                        <button onClick={handleAddCert} className="md:col-span-2 bg-slate-800 dark:bg-emerald-600 text-white py-2 rounded hover:bg-slate-900 dark:hover:bg-emerald-700">
                             Add Certification
                         </button>
                     </div>
 
                     <div className="space-y-2">
                         {certs.map((c, idx) => (
-                            <div key={c.id || idx} className="flex justify-between items-center p-3 bg-white border rounded">
+                            <div key={c.id || idx} className="flex justify-between items-center p-3 bg-white dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded">
                                 <div>
-                                    <span className="font-bold block">{c.cert_name}</span>
-                                    <span className="text-xs text-slate-500">Expires: {c.expiry_date}</span>
+                                    <span className="font-bold block text-slate-800 dark:text-white">{c.cert_name}</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Expires: {c.expiry_date}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {c.document_url && <a href={c.document_url} target="_blank" rel="noreferrer" className="text-emerald-600 text-sm underline">View</a>}
@@ -641,15 +659,15 @@ export default function WorkerDashboard() {
 
             {/* --- Step 5: History --- */}
             {step === 5 && (
-                <div className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold text-lg">Work History</h3>
-                    <div id="project-form" className="bg-slate-50 p-4 rounded-lg space-y-3">
+                <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Work History</h3>
+                    <div id="project-form" className="bg-slate-50 dark:bg-slate-950/50 p-4 rounded-lg space-y-3">
                         <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-medium text-slate-700">{newProject.id ? 'Edit Project' : 'Add New Project'}</h4>
+                            <h4 className="font-medium text-slate-700 dark:text-slate-300">{newProject.id ? 'Edit Project' : 'Add New Project'}</h4>
                             {newProject.id && (
                                 <button
                                     onClick={() => setNewProject({})}
-                                    className="text-xs text-slate-500 hover:text-slate-800 underline"
+                                    className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white underline"
                                 >
                                     Cancel Edit
                                 </button>
@@ -657,25 +675,25 @@ export default function WorkerDashboard() {
                         </div>
 
                         <input
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             placeholder="Project Name / Company"
                             value={newProject.project_name || ''}
                             onChange={e => setNewProject({ ...newProject, project_name: e.target.value })}
                         />
                         <input
-                            className="w-full p-2 border rounded"
+                            className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             placeholder="Role (e.g. Lead Welder)"
                             value={newProject.role || ''}
                             onChange={e => setNewProject({ ...newProject, role: e.target.value })}
                         />
                         <div className="grid grid-cols-2 gap-4">
                             <input
-                                type="number" placeholder="Start Year" className="p-2 border rounded"
+                                type="number" placeholder="Start Year" className="p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                                 value={newProject.year_start || ''}
                                 onChange={e => setNewProject({ ...newProject, year_start: parseInt(e.target.value) })}
                             />
                             <input
-                                type="number" placeholder="End Year" className="p-2 border rounded"
+                                type="number" placeholder="End Year" className="p-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                                 value={newProject.year_end || ''}
                                 onChange={e => setNewProject({ ...newProject, year_end: parseInt(e.target.value) })}
                             />
@@ -683,7 +701,7 @@ export default function WorkerDashboard() {
 
                         {/* New Description Field */}
                         <textarea
-                            className="w-full p-2 border rounded h-24"
+                            className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded h-24 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                             placeholder="Short write-up about your experience (e.g. Responsibilities, key achievements...)"
                             value={newProject.description || ''}
                             onChange={e => setNewProject({ ...newProject, description: e.target.value })}
@@ -700,29 +718,29 @@ export default function WorkerDashboard() {
                         </button>
                     </div>
 
-                    <div className="space-y-4 border-l-2 border-slate-200 ml-2 pl-4">
+                    <div className="space-y-4 border-l-2 border-slate-200 dark:border-slate-700 ml-2 pl-4">
                         {projects.map((p, idx) => (
                             <div key={p.id || idx} className="relative group">
-                                <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-400"></div>
+                                <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-slate-400 dark:bg-slate-600"></div>
 
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h4 className="font-bold text-slate-800">{p.project_name}</h4>
-                                        <p className="text-sm text-emerald-600 font-medium">{p.role}</p>
-                                        <span className="text-xs text-slate-400">{p.year_start} - {p.year_end}</span>
+                                        <h4 className="font-bold text-slate-800 dark:text-white">{p.project_name}</h4>
+                                        <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">{p.role}</p>
+                                        <span className="text-xs text-slate-400 dark:text-slate-500">{p.year_start} - {p.year_end}</span>
                                     </div>
 
                                     <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                         <button
                                             onClick={() => handleEditProject(p)}
-                                            className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"
+                                            className="p-1 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
                                             title="Edit"
                                         >
                                             <Edit3 size={16} />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteProject(p.id)}
-                                            className={`p-1 rounded transition-all duration-200 ${deleteConfirmProjectId === p.id ? 'bg-red-600 text-white px-3' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}
+                                            className={`p-1 rounded transition-all duration-200 ${deleteConfirmProjectId === p.id ? 'bg-red-600 text-white px-3' : 'text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'}`}
                                             title="Delete"
                                         >
                                             {deleteConfirmProjectId === p.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
@@ -731,7 +749,7 @@ export default function WorkerDashboard() {
                                 </div>
 
                                 {p.description && (
-                                    <p className="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-950/50 p-2 rounded border border-slate-100 dark:border-slate-800">
                                         {p.description}
                                     </p>
                                 )}
@@ -742,11 +760,11 @@ export default function WorkerDashboard() {
             )}
 
             {/* Actions */}
-            <div className="mt-8 flex justify-between sticky bottom-0 bg-slate-50 p-4 border-t border-slate-200">
+            <div className="mt-8 flex justify-between sticky bottom-0 bg-slate-50 dark:bg-slate-950 p-4 border-t border-slate-200 dark:border-slate-800">
                 <button
                     onClick={() => setStep(Math.max(1, step - 1))}
                     disabled={step === 1}
-                    className="px-6 py-3 rounded-lg bg-white border border-slate-300 text-slate-700 disabled:opacity-50"
+                    className="px-6 py-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 disabled:opacity-50"
                 >
                     Back
                 </button>

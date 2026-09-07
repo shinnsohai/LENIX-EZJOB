@@ -36,7 +36,7 @@ export default function VideoLinkInput({ label, value, onChange, placeholder }: 
 
   return (
     <div className="mb-4">
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{label}</label>
       <div className="relative">
         <input
           type="url"
@@ -44,21 +44,21 @@ export default function VideoLinkInput({ label, value, onChange, placeholder }: 
           onChange={handleChange}
           onBlur={(e) => validateUrl(e.target.value)}
           placeholder={placeholder}
-          className={`w-full rounded-md border px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 ${
-            status === 'invalid' 
-              ? 'border-red-300 focus:ring-red-200' 
-              : status === 'valid' 
-                ? 'border-green-300 focus:ring-green-200' 
-                : 'border-slate-300 focus:ring-emerald-200'
+          className={`w-full rounded-md border px-3 py-2 pr-10 text-sm bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 ${
+            status === 'invalid'
+              ? 'border-red-300 dark:border-red-800 focus:ring-red-200 dark:focus:ring-red-900'
+              : status === 'valid'
+                ? 'border-green-300 dark:border-green-800 focus:ring-green-200 dark:focus:ring-green-900'
+                : 'border-slate-300 dark:border-slate-700 focus:ring-emerald-200 dark:focus:ring-emerald-900'
           }`}
         />
         <div className="absolute right-3 top-2.5">
-          {status === 'valid' && <CheckCircle2 className="text-green-500" size={18} />}
-          {status === 'invalid' && <AlertCircle className="text-red-500" size={18} />}
+          {status === 'valid' && <CheckCircle2 className="text-green-500 dark:text-green-400" size={18} />}
+          {status === 'invalid' && <AlertCircle className="text-red-500 dark:text-red-400" size={18} />}
         </div>
       </div>
       {status === 'invalid' && (
-        <p className="text-xs text-red-500 mt-1">Please enter a valid link (YouTube, TikTok, Vimeo, FB).</p>
+        <p className="text-xs text-red-500 dark:text-red-400 mt-1">Please enter a valid link (YouTube, TikTok, Vimeo, FB).</p>
       )}
     </div>
   );
