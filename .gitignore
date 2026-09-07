@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Locally-installed agent skills (npx skills add) — third-party, not part
+# of the EZJOB app itself; keep them usable locally without committing
+# them into project history.
+.agents/
+.claude/skills/
+skills-lock.json
