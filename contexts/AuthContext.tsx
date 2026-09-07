@@ -106,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const register = async (identifier: string, password: string, role: UserRole) => {
         const cleanIdentifier = identifier.trim();
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email: cleanIdentifier,
             password,
             options: {
@@ -120,6 +120,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) {
             throw error;
         }
+
+        // If the Supabase project has "Confirm email" enabled, signUp()
+        // creates the auth user (and, via the trigger, their profile) but
+        // returns no session — the caller needs to know this so it can show
+        // a "check your email" state instead of waiting forever for a
+        // redirect that will never come.
+        return { needsEmailConfirmation: !data.session };
     };
 
     const logout = async () => {

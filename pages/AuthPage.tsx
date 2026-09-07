@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { UserRole } from '../types';
-import { User, Lock, UserCheck, Briefcase } from 'lucide-react';
+import { User, Lock, UserCheck, Briefcase, MailCheck } from 'lucide-react';
 
 interface AuthPageProps {
     mode: 'login' | 'register';
@@ -17,6 +17,10 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [awaitingRedirect, setAwaitingRedirect] = useState(false);
+    // Set when registration succeeds but the Supabase project requires email
+    // confirmation (no session comes back yet) -- shows a "check your email"
+    // state instead of silently sitting on the form forever.
+    const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string | null>(null);
 
     const { login, register, user } = useAuth();
     const { isDark } = useTheme();
@@ -69,7 +73,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
 
         try {
             if (isRegister) {
-                await register(identifier, password, role);
+                const { needsEmailConfirmation } = await register(identifier, password, role);
+                if (needsEmailConfirmation) {
+                    setPendingConfirmationEmail(identifier.trim());
+                    setIsLoading(false);
+                    return;
+                }
             } else {
                 await login(identifier, password);
             }
@@ -121,6 +130,30 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
 
                 {/* Main Card */}
                 <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-7 sm:p-9 rounded-3xl shadow-xl backdrop-blur-xl transition-colors">
+                    {pendingConfirmationEmail ? (
+                        <div className="text-center space-y-4">
+                            <div className="mx-auto w-14 h-14 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800 flex items-center justify-center">
+                                <MailCheck size={26} className="text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Check your email</h2>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono leading-relaxed">
+                                We sent a confirmation link to
+                                <br />
+                                <span className="text-slate-900 dark:text-white font-bold">{pendingConfirmationEmail}</span>
+                                <br />
+                                Click it to activate your account, then sign in below.
+                            </p>
+                            <div className="pt-2">
+                                <Link
+                                    to="/login"
+                                    className="inline-block w-full py-3.5 px-4 bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold uppercase text-xs font-mono rounded-xl transition-all shadow-lg hover:shadow-cyan-500/25"
+                                >
+                                    Go to Sign In
+                                </Link>
+                            </div>
+                        </div>
+                    ) : (
+                    <>
                     <div className="text-center mb-6">
                         <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">{title}</h2>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1.5 leading-relaxed">{subTitle}</p>
@@ -224,6 +257,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                             {isRegister ? 'Sign In' : 'Sign Up'}
                         </Link>
                     </div>
+                    </>
+                    )}
                 </div>
             </div>
         </div>
