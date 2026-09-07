@@ -73,7 +73,7 @@ $json$::jsonb),
 
 ('assets', $json$
 {
-  "logoUrl": "/assets/lenix-logo-light.png",
+  "logoUrl": "",
   "heroBackgroundUrl": ""
 }
 $json$::jsonb)

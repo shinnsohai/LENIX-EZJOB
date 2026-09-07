@@ -1,5 +1,5 @@
 -- ============================================================================
--- EZJOB: combined migration (0001-0006), generated for one-shot paste into
+-- EZJOB: combined migration (0001-0005), generated for one-shot paste into
 -- the Supabase SQL Editor. The source of truth is migrations/*.sql, applied
 -- in order via the Supabase CLI (supabase db push) if you have it installed;
 -- this file exists purely as a copy-paste convenience for the dashboard.
@@ -615,7 +615,7 @@ $json$::jsonb),
 
 ('assets', $json$
 {
-  "logoUrl": "/assets/lenix-logo-light.png",
+  "logoUrl": "",
   "heroBackgroundUrl": ""
 }
 $json$::jsonb)
@@ -648,19 +648,3 @@ insert into public.blog_posts (id, title, content, image_url, author, publish_da
   '2025-08-05T09:00:00Z'
 )
 on conflict do nothing;
-
--- ---- migrations/0006_job_mobile_fields.sql ----
--- Mobile-first job posting fields for blue-collar/shift-based applicants:
--- shift schedule, perks, a WhatsApp quick-apply number, screening questions,
--- and transport/accommodation logistics. All nullable/defaulted so existing
--- jobs and the existing insert/update code paths keep working unchanged.
-
-alter table public.jobs
-  add column shift_schedule        text,
-  add column perks                 text,
-  add column whatsapp_number       text,
-  add column qualifying_questions  text[] not null default '{}',
-  add column transport_provided    boolean not null default false,
-  add column transport_details     text,
-  add column accommodation_provided boolean not null default false,
-  add column accommodation_details text;

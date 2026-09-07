@@ -153,7 +153,13 @@ const initialHomepageContent: HomepageContent = {
 };
 
 const initialSiteAssets: SiteAssets = {
-    logoUrl: '/assets/lenix-logo-light.png',
+    // Empty = "no admin override configured yet" — BrandLogoCluster falls
+    // back to the bundled EZJOB logo (theme-correct light/dark variant)
+    // in that case. This was previously hardcoded to the LENIX logo path
+    // (a leftover default from before the EZJOB-specific logo assets
+    // existed), which made the Header/Footer show LENIX's logo twice
+    // instead of the actual EZJOB product mark.
+    logoUrl: '',
     heroBackgroundUrl: '',
 };
 
