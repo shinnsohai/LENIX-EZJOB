@@ -58,7 +58,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactElement; role: UserRole }>
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (user.role !== role) {
+    // Admins can navigate into any role-gated section (worker/employer views)
+    // for oversight and testing, in addition to the dedicated admin console.
+    if (user.role !== role && user.role !== UserRole.ADMIN) {
         return <Navigate to="/" replace />;
     }
 

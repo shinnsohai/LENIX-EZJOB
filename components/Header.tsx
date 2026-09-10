@@ -77,7 +77,7 @@ const Header: React.FC = () => {
                             </Link>
                         )}
 
-                        {user?.role === UserRole.EMPLOYER ? (
+                        {user?.role === UserRole.EMPLOYER || user?.role === UserRole.ADMIN ? (
                             <Link to="/employer/dashboard" className={navLinkClass('/employer/dashboard')}>
                                 Employer Studio
                             </Link>
@@ -91,7 +91,7 @@ const Header: React.FC = () => {
                             </Link>
                         )}
 
-                        {user?.role === UserRole.WORKER ? (
+                        {user?.role === UserRole.WORKER || user?.role === UserRole.ADMIN ? (
                             <>
                                 <Link to="/worker/dashboard" className={navLinkClass('/worker/dashboard')}>
                                     Skill Passport
@@ -197,7 +197,7 @@ const Header: React.FC = () => {
                             </Link>
                         )}
 
-                        {user?.role === UserRole.EMPLOYER ? (
+                        {user?.role === UserRole.EMPLOYER || user?.role === UserRole.ADMIN ? (
                             <Link to="/employer/dashboard" className={mobileNavLinkClass('/employer/dashboard')} onClick={closeMobileMenu}>
                                 Employer Studio
                             </Link>
@@ -212,7 +212,7 @@ const Header: React.FC = () => {
                             </Link>
                         )}
 
-                        {user?.role === UserRole.WORKER ? (
+                        {user?.role === UserRole.WORKER || user?.role === UserRole.ADMIN ? (
                             <>
                                 <Link to="/worker/dashboard" className={mobileNavLinkClass('/worker/dashboard')} onClick={closeMobileMenu}>
                                     Skill Passport
