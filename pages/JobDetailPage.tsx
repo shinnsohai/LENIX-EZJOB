@@ -8,6 +8,7 @@ import Spinner from '../components/Spinner';
 import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift } from 'lucide-react';
 import { UserRole } from '../types';
 import type { Job } from '../types';
+import { formatSalaryRange } from '../data/currencies';
 
 export default function JobDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -154,7 +155,7 @@ export default function JobDetailPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <DollarSign size={18} />
-                                    <span>${job.salary_min.toLocaleString()} - ${job.salary_max.toLocaleString()}</span>
+                                    <span>{formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Briefcase size={18} />

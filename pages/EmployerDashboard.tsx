@@ -1073,7 +1073,7 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         </div>
                                         <p className="text-sm text-gray-500">{job.employer_name} &middot; {job.location}, {job.country}</p>
                                         <p className="text-sm font-semibold text-emerald-600 mt-1">
-                                            {formatSalaryRange(job.salary_min, job.salary_max, job.country)}
+                                            {formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-wrap">

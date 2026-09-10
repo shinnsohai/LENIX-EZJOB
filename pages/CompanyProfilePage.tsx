@@ -5,6 +5,7 @@ import { getEmployerProfile, getJobs } from '../services/db';
 import Spinner from '../components/Spinner';
 import { Building2, MapPin, Globe, Phone, Users, Calendar, ArrowLeft, Briefcase, DollarSign } from 'lucide-react';
 import type { EmployerProfile, Job } from '../types';
+import { formatSalaryRange } from '../data/currencies';
 
 export default function CompanyProfilePage() {
     const { id } = useParams<{ id: string }>();
@@ -69,7 +70,8 @@ export default function CompanyProfilePage() {
         return (
             <div className="container mx-auto px-4 py-8">
                 <div className="text-center">
-                    <h2 className="text-2xl font-bold text-slate-800">Company Not Found</h2>
+                    <h2 className="text-2xl font-bold text-slate-800">This employer hasn't published a company profile yet</h2>
+                    <p className="mt-2 text-slate-500 text-sm">Their job listings are still real and open — there just isn't a public company page to show.</p>
                     <button
                         onClick={() => navigate('/jobs')}
                         className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
@@ -199,7 +201,7 @@ export default function CompanyProfilePage() {
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <DollarSign size={14} />
-                                                    ${job.salary_min.toLocaleString()} - ${job.salary_max.toLocaleString()}
+                                                    {formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr
                                                 </span>
                                             </div>
                                         </div>

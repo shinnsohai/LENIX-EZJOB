@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
 import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home } from 'lucide-react';
+import { formatSalaryRange } from '../data/currencies';
 
 const TRADE_CATEGORIES = [
     'All Roles',
@@ -77,7 +78,7 @@ const JobCard: React.FC<{
                     <div className="flex items-center gap-1.5">
                         <DollarSign size={14} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            ${job.salary_min ? job.salary_min.toLocaleString() : '0'} - ${job.salary_max ? job.salary_max.toLocaleString() : '0'} / mo
+                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} / yr
                         </span>
                     </div>
                     {job.shift_schedule && (
