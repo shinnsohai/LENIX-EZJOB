@@ -52,23 +52,193 @@ function useInView<T extends HTMLElement>() {
     return { ref, inView };
 }
 
-/** Fade-and-rise reveal wrapper. Communicates hierarchy by sequencing content into view as the user scrolls; degrades to static under reduced motion. */
-const Reveal: React.FC<{ children: React.ReactNode; className?: string; delayMs?: number }> = ({
-    children,
-    className = '',
-    delayMs = 0,
-}) => {
+/** Fade-and-rise reveal wrapper, with a variant anchor so entrances aren't
+ * identical across every section (`up` is the original, unchanged default).
+ * Communicates hierarchy by sequencing content into view as the user
+ * scrolls; degrades to static under reduced motion. Transform + opacity
+ * only, never width/height/top/left. */
+const Reveal: React.FC<{
+    children: React.ReactNode;
+    className?: string;
+    delayMs?: number;
+    from?: 'up' | 'left' | 'right' | 'scale';
+    style?: React.CSSProperties;
+}> = ({ children, className = '', delayMs = 0, from = 'up', style }) => {
     const { ref, inView } = useInView<HTMLDivElement>();
+    const hidden = {
+        up: 'opacity-0 translate-y-6',
+        left: 'opacity-0 -translate-x-8',
+        right: 'opacity-0 translate-x-8',
+        scale: 'opacity-0 scale-95',
+    }[from];
     return (
         <div
             ref={ref}
-            className={`transition-all duration-700 ease-out ${
-                inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+            // Scoped to opacity/transform only (never `transition-all`) so any
+            // other scroll-linked inline style a caller passes in `style`
+            // (border color, shadow, etc.) writes instantly per frame instead
+            // of being dragged through this element's own 700ms easing.
+            className={`transition-[opacity,transform] duration-700 ease-out ${
+                inView ? 'opacity-100 translate-x-0 translate-y-0 scale-100' : hidden
             } ${className}`}
-            style={{ transitionDelay: inView ? `${delayMs}ms` : '0ms' }}
+            style={{ transitionDelay: inView ? `${delayMs}ms` : '0ms', ...style }}
         >
             {children}
         </div>
+    );
+};
+
+/** Wipes a large element in via clip-path rather than fading it — "a wipe is
+ * a change of state", reserved for one full-width element per use, not
+ * scattered across small ones. Settles fully open under reduced motion.
+ * Driven off scroll progress (defined below) rather than
+ * IntersectionObserver: a full-width panel stuck permanently clipped shut
+ * is a much worse failure than a fade that's a beat late, so this avoids
+ * IO's async, compositor-tied callback timing entirely. Latches open once
+ * crossed and never re-clips on scrolling back up. */
+const WipeReveal: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => {
+    const { ref, progress } = useScrollProgress<HTMLDivElement>(1);
+    const [revealed, setRevealed] = useState(false);
+    useEffect(() => {
+        if (progress > 0.05 && !revealed) setRevealed(true);
+    }, [progress, revealed]);
+    return (
+        <div
+            ref={ref}
+            className={`transition-[clip-path] duration-[900ms] ease-out ${className}`}
+            style={{ clipPath: revealed ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)' }}
+        >
+            {children}
+        </div>
+    );
+};
+
+/** 0..1 progress of an element's traversal through the viewport (0 = top
+ * edge at the viewport's bottom, 1 = bottom edge at the viewport's top),
+ * rAF-throttled off a passive scroll listener. Drives continuous
+ * scroll-linked effects (depth, intensity) as an alternative to the binary
+ * in/out of useInView. Settles at a fixed neutral value under reduced
+ * motion so dependent transforms resolve to their rest position instead of
+ * animating. */
+function useScrollProgress<T extends HTMLElement>(neutral = 0.5) {
+    const ref = useRef<T | null>(null);
+    const [progress, setProgress] = useState(neutral);
+
+    useEffect(() => {
+        const reduced =
+            typeof window !== 'undefined' && window.matchMedia
+                ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                : false;
+        if (reduced || !ref.current) return;
+
+        const node = ref.current;
+        let raf = 0;
+        const measure = () => {
+            raf = 0;
+            const rect = node.getBoundingClientRect();
+            const vh = window.innerHeight || 1;
+            const total = rect.height + vh;
+            const traveled = vh - rect.top;
+            setProgress(Math.min(1, Math.max(0, traveled / total)));
+        };
+        const onScroll = () => {
+            if (!raf) raf = requestAnimationFrame(measure);
+        };
+
+        measure();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        return () => {
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, []);
+
+    return { ref, progress };
+}
+
+/** Raw page scrollY, rAF-throttled and capped to `cap` px so a parallax
+ * layer's travel stays bounded regardless of total scroll distance. Reads 0
+ * (no motion, correct resting composition) under reduced motion. */
+function useScrollY(cap = 400) {
+    const [y, setY] = useState(0);
+    useEffect(() => {
+        const reduced =
+            typeof window !== 'undefined' && window.matchMedia
+                ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                : false;
+        if (reduced) return;
+        let raf = 0;
+        const measure = () => {
+            raf = 0;
+            setY(Math.min(cap, window.scrollY));
+        };
+        const onScroll = () => {
+            if (!raf) raf = requestAnimationFrame(measure);
+        };
+        measure();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            window.removeEventListener('scroll', onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, [cap]);
+    return y;
+}
+
+/** Ticks a displayed number from 0 to `target` once, starting when `active`
+ * flips true (paired with useInView). Cubic ease-out over ~1.5s, matching
+ * the "numbers that land" pattern: most of the distance covered early, the
+ * last digits settling slowly. Reduced motion writes the final value with
+ * no animation. */
+function useCountUp(target: number, active: boolean, durationMs = 1500) {
+    const [value, setValue] = useState(0);
+    const startedRef = useRef(false);
+
+    useEffect(() => {
+        if (!active || startedRef.current) return;
+        startedRef.current = true;
+
+        const reduced =
+            typeof window !== 'undefined' && window.matchMedia
+                ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                : false;
+        if (reduced) {
+            setValue(target);
+            return;
+        }
+
+        const start = performance.now();
+        let raf = 0;
+        const tick = (now: number) => {
+            const t = Math.min(1, (now - start) / durationMs);
+            const eased = 1 - Math.pow(1 - t, 3);
+            setValue(Math.round(target * eased));
+            if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [active, target, durationMs]);
+
+    return value;
+}
+
+/** A stat that ticks up once it scrolls into view instead of sitting there
+ * static. `suffix` (k+, %, h) renders untouched — only the numeric part
+ * counts. */
+const StatCounter: React.FC<{ target: number; suffix: string; active: boolean; className?: string }> = ({
+    target,
+    suffix,
+    active,
+    className = '',
+}) => {
+    const value = useCountUp(target, active);
+    return (
+        <span className={className}>
+            {value}
+            {suffix}
+        </span>
     );
 };
 
@@ -78,18 +248,30 @@ const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
 const HeroSection = () => {
     const navigate = useNavigate();
     const { homepageContent } = useSiteContent();
+    const { ref: statsRef, inView: statsInView } = useInView<HTMLDivElement>();
+    // Two-plane depth: the ambient wallpaper is the back plane (moves against
+    // scroll direction, slower), the photo is the front plane (moves with
+    // scroll, slightly faster). Copy and CTAs ride at 1x — untouched — so
+    // nothing the visitor is reading ever moves relative to itself. Capped at
+    // a few dozen px, per parallax's "subtle or nothing" ceiling.
+    const scrollY = useScrollY(320);
+    const backOffset = -scrollY * 0.09;
+    const frontOffset = scrollY * 0.06;
 
     return (
         <section className="relative w-full pt-16 sm:pt-20 pb-24 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors duration-300">
             {/* Ambient brand-gradient wallpaper. Decorative background only, not a
                 functional accent, so it keeps the site's established tri-color
                 brand identity (see .text-gradient-lenix in index.css) while every
-                interactive element below stays locked to a single cyan accent. */}
+                interactive element below stays locked to a single cyan accent.
+                Back parallax plane: no transition on transform (a direct
+                per-frame write, eased transitions lag behind the scroll). */}
             <div
                 className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-20"
                 style={{
                     backgroundImage:
                         'radial-gradient(circle at 80% -20%, #3b82f6 0%, transparent 45%), radial-gradient(circle at 20% 120%, #d946ef 0%, transparent 45%), radial-gradient(circle at 50% 50%, #06b6d4 0%, transparent 60%)',
+                    transform: `translate3d(0, ${backOffset}px, 0)`,
                 }}
             />
 
@@ -132,22 +314,37 @@ const HeroSection = () => {
                         </button>
                     </div>
 
-                    {/* Quick stats */}
-                    <div className="grid grid-cols-3 gap-6 pt-8 mt-2 border-t border-slate-200 dark:border-slate-800/90">
+                    {/* Quick stats: tick up once, the first time they're on screen */}
+                    <div ref={statsRef} className="grid grid-cols-3 gap-6 pt-8 mt-2 border-t border-slate-200 dark:border-slate-800/90">
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">12k+</span>
+                            <StatCounter
+                                target={12}
+                                suffix="k+"
+                                active={statsInView}
+                                className="block text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums"
+                            />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Active Projects
                             </span>
                         </div>
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400">98%</span>
+                            <StatCounter
+                                target={98}
+                                suffix="%"
+                                active={statsInView}
+                                className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
+                            />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Match Rate
                             </span>
                         </div>
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400">24h</span>
+                            <StatCounter
+                                target={24}
+                                suffix="h"
+                                active={statsInView}
+                                className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
+                            />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Avg. Placement
                             </span>
@@ -155,8 +352,12 @@ const HeroSection = () => {
                     </div>
                 </div>
 
-                {/* Hero visual: a real photograph, not a fabricated dashboard preview */}
-                <div className="lg:col-span-5 relative hidden lg:block">
+                {/* Hero visual: a real photograph, not a fabricated dashboard preview.
+                    Front parallax plane — travels slightly faster than the page. */}
+                <div
+                    className="lg:col-span-5 relative hidden lg:block"
+                    style={{ transform: `translate3d(0, ${frontOffset}px, 0)` }}
+                >
                     <div
                         className="absolute -inset-6 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-transparent rounded-[2rem] blur-2xl pointer-events-none"
                         aria-hidden="true"
@@ -229,8 +430,10 @@ const HighVelocityRolesSection = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                {/* Featured role: larger, asymmetric weight against the two stacked roles */}
-                <Reveal className="lg:col-span-3">
+                {/* Featured role: larger, asymmetric weight against the two stacked roles.
+                    Enters from the left, the side roles from the right — anchor
+                    variety instead of every card fading up the same way. */}
+                <Reveal from="left" className="lg:col-span-3">
                     <div className="h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg transition-shadow p-8 flex flex-col justify-between">
                         <div>
                             <div className="flex items-center justify-between mb-4">
@@ -258,7 +461,7 @@ const HighVelocityRolesSection = () => {
 
                 <div className="lg:col-span-2 flex flex-col gap-6">
                     {rest.map((role, idx) => (
-                        <Reveal key={idx} delayMs={(idx + 1) * 90} className="flex-1">
+                        <Reveal key={idx} from="right" delayMs={(idx + 1) * 90} className="flex-1">
                             <div className="h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between">
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
@@ -319,7 +522,7 @@ const FeaturesSection = () => {
                         const isTintedTile = i === 3;
                         const Icon = f.icon;
                         return (
-                            <Reveal key={i} delayMs={i * 70} className={isWide ? 'lg:col-span-2' : ''}>
+                            <Reveal key={i} from="scale" delayMs={i * 70} className={isWide ? 'lg:col-span-2' : ''}>
                                 <div
                                     className={`h-full rounded-2xl p-6 border transition-all hover:-translate-y-1 ${
                                         isDarkTile
@@ -360,6 +563,15 @@ const AiInActionSection = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [genError, setGenError] = useState('');
 
+    // Signature move for this page: the demo panel "spools up" as it centers
+    // in the viewport, rather than simply fading in like every other
+    // section. `focus` peaks at 1 when the section is dead-center on screen
+    // and falls off toward its edges, driving the ambient glow's intensity —
+    // this is the page's one engineered peak, tied to its most interactive
+    // moment (the live AI generator), not a generic scroll flourish.
+    const { ref: engineRef, progress: engineProgress } = useScrollProgress<HTMLElement>(0.5);
+    const focus = Math.max(0, 1 - Math.abs(engineProgress - 0.5) * 2.2);
+
     const handleGenerate = async () => {
         if (!jobTitle) return;
         setIsGenerating(true);
@@ -385,9 +597,25 @@ const AiInActionSection = () => {
     };
 
     return (
-        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
-            <Reveal className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-white rounded-2xl p-8 sm:p-12 border border-slate-800 relative overflow-hidden shadow-2xl">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-cyan-500/10 to-fuchsia-500/10 blur-3xl pointer-events-none" />
+        <section ref={engineRef} className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+            <Reveal
+                className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-white rounded-2xl p-8 sm:p-12 border relative overflow-hidden shadow-2xl"
+                style={{
+                    borderColor: `rgba(34, 211, 238, ${0.15 + focus * 0.35})`,
+                    boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 ${40 + focus * 60}px rgba(6, 182, 212, ${focus * 0.25})`,
+                }}
+            >
+                {/* Ambient glow: opacity and scale rise as the panel centers in the
+                    viewport, reading as the engine "powering up". Transform +
+                    opacity only, written directly off scroll progress — no eased
+                    transition on transform, so it never lags a frame behind. */}
+                <div
+                    className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-cyan-500/10 to-fuchsia-500/10 blur-3xl pointer-events-none"
+                    style={{
+                        opacity: 0.6 + focus * 0.9,
+                        transform: `scale(${0.85 + focus * 0.35})`,
+                    }}
+                />
 
                 <div className="max-w-3xl mx-auto text-center mb-8 relative z-10">
                     <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">Interactive Demo</span>
@@ -471,7 +699,10 @@ const ComparisonSection = () => {
                 <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">EZJOB by LENIX vs. Generic Portals</h2>
             </Reveal>
 
-            <Reveal className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+            {/* A wipe, not a fade — dramatizes the comparison as a change of
+                state rather than just introducing an image, and it's used on
+                one big element (the whole table), not scattered across rows. */}
+            <WipeReveal className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -502,7 +733,7 @@ const ComparisonSection = () => {
                         </tbody>
                     </table>
                 </div>
-            </Reveal>
+            </WipeReveal>
         </section>
     );
 };
@@ -595,19 +826,26 @@ const FinalCtaSection = () => {
                 <p className="text-slate-300 text-sm max-w-xl mx-auto mb-8 leading-relaxed">
                     Join thousands of verified skilled trades professionals and tier-1 employers on EZJOB by LENIX.
                 </p>
+                {/* Converging close: the two final actions arrive from opposite
+                    edges and meet at center as the page resolves, instead of
+                    trailing off into a plain footer-like block. */}
                 <div className="flex flex-wrap justify-center items-center gap-4">
-                    <button
-                        onClick={() => navigate('/register', { state: { role: UserRole.WORKER } })}
-                        className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider font-bold py-3.5 px-8 rounded-full shadow-lg transition-all cursor-pointer active:scale-[0.98]"
-                    >
-                        Create Skill Passport
-                    </button>
-                    <button
-                        onClick={() => navigate('/register', { state: { role: UserRole.EMPLOYER } })}
-                        className="bg-slate-950 dark:bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 font-mono text-xs uppercase tracking-wider font-semibold py-3.5 px-8 rounded-full transition-all cursor-pointer active:scale-[0.98]"
-                    >
-                        Post a Role
-                    </button>
+                    <Reveal from="left" delayMs={100}>
+                        <button
+                            onClick={() => navigate('/register', { state: { role: UserRole.WORKER } })}
+                            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider font-bold py-3.5 px-8 rounded-full shadow-lg transition-all cursor-pointer active:scale-[0.98]"
+                        >
+                            Create Skill Passport
+                        </button>
+                    </Reveal>
+                    <Reveal from="right" delayMs={100}>
+                        <button
+                            onClick={() => navigate('/register', { state: { role: UserRole.EMPLOYER } })}
+                            className="bg-slate-950 dark:bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 font-mono text-xs uppercase tracking-wider font-semibold py-3.5 px-8 rounded-full transition-all cursor-pointer active:scale-[0.98]"
+                        >
+                            Post a Role
+                        </button>
+                    </Reveal>
                 </div>
             </Reveal>
         </section>
