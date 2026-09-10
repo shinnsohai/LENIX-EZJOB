@@ -80,7 +80,7 @@ const HeroSection = () => {
     const { homepageContent } = useSiteContent();
 
     return (
-        <section className="relative w-full pt-16 sm:pt-20 pb-20 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors duration-300">
+        <section className="relative w-full pt-16 sm:pt-20 pb-24 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors duration-300">
             {/* Ambient brand-gradient wallpaper. Decorative background only, not a
                 functional accent, so it keeps the site's established tri-color
                 brand identity (see .text-gradient-lenix in index.css) while every
@@ -104,7 +104,7 @@ const HeroSection = () => {
                     </div>
 
                     {/* Headline: 2 lines max, single locked accent for the emphasis word */}
-                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] text-slate-900 dark:text-white max-w-2xl">
+                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-slate-900 dark:text-white max-w-2xl">
                         Engineering the <span className="text-gradient-cyan-blue">future of work.</span>
                     </h1>
 
@@ -135,20 +135,20 @@ const HeroSection = () => {
                     {/* Quick stats */}
                     <div className="grid grid-cols-3 gap-6 pt-8 mt-2 border-t border-slate-200 dark:border-slate-800/90">
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">12k+</span>
-                            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="block text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">12k+</span>
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Active Projects
                             </span>
                         </div>
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">98%</span>
-                            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400">98%</span>
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Match Rate
                             </span>
                         </div>
                         <div>
-                            <span className="block text-2xl sm:text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">24h</span>
-                            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400">24h</span>
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                 Avg. Placement
                             </span>
                         </div>
@@ -206,7 +206,7 @@ const HighVelocityRolesSection = () => {
     const [featured, ...rest] = sampleRoles;
 
     return (
-        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
             <div
                 ref={ref}
                 className={`flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10 transition-all duration-700 ease-out ${
@@ -214,7 +214,7 @@ const HighVelocityRolesSection = () => {
                 }`}
             >
                 <div>
-                    <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">High-Velocity Roles</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">High-Velocity Roles</h2>
                     <p className="text-slate-600 dark:text-slate-300 text-sm mt-1 max-w-md">
                         Real-time matching for industrial, engineering, and certified technical specialists.
                     </p>
@@ -234,7 +234,7 @@ const HighVelocityRolesSection = () => {
                     <div className="h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg transition-shadow p-8 flex flex-col justify-between">
                         <div>
                             <div className="flex items-center justify-between mb-4">
-                                <span className="px-3 py-1 rounded-full text-[11px] font-mono font-bold uppercase bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60">
+                                <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60">
                                     {featured.category}
                                 </span>
                                 <span className="text-slate-400 text-xs font-mono">{featured.location}</span>
@@ -248,7 +248,7 @@ const HighVelocityRolesSection = () => {
                             <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{featured.rate}</span>
                             <button
                                 onClick={() => navigate('/jobs')}
-                                className="bg-slate-900 dark:bg-cyan-500 hover:bg-cyan-600 dark:hover:bg-cyan-400 text-white dark:text-slate-950 font-mono text-[11px] uppercase px-5 py-2.5 rounded-full font-semibold transition-colors cursor-pointer active:scale-[0.98]"
+                                className="bg-slate-900 dark:bg-cyan-500 hover:bg-cyan-600 dark:hover:bg-cyan-400 text-white dark:text-slate-950 font-mono text-xs uppercase px-5 py-2.5 rounded-full font-semibold transition-colors cursor-pointer active:scale-[0.98]"
                             >
                                 Apply Now
                             </button>
@@ -262,7 +262,7 @@ const HighVelocityRolesSection = () => {
                             <div className="h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between">
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                                             {role.category}
                                         </span>
                                         <span className="text-slate-400 text-xs font-mono">{role.location}</span>
@@ -276,7 +276,7 @@ const HighVelocityRolesSection = () => {
                                     <span className="font-mono text-xs font-bold text-slate-900 dark:text-white">{role.rate}</span>
                                     <button
                                         onClick={() => navigate('/jobs')}
-                                        className="text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 font-mono text-[11px] uppercase font-bold transition-colors cursor-pointer active:scale-[0.98]"
+                                        className="text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 font-mono text-xs uppercase font-bold transition-colors cursor-pointer active:scale-[0.98]"
                                     >
                                         Apply Now
                                     </button>
@@ -301,10 +301,10 @@ const FeaturesSection = () => {
     ];
 
     return (
-        <section className="py-16 bg-slate-50 dark:bg-slate-900/60 border-y border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
+        <section className="py-20 bg-slate-50 dark:bg-slate-900/60 border-y border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
                 <Reveal className="max-w-2xl mb-12">
-                    <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">Built for Industrial Precision</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Built for Industrial Precision</h2>
                     <p className="text-slate-600 dark:text-slate-300 text-sm mt-2">
                         Every feature in EZJOB by LENIX is architected to eliminate hiring friction in skilled trades.
                     </p>
@@ -333,7 +333,7 @@ const FeaturesSection = () => {
                                         className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${
                                             isDarkTile
                                                 ? 'bg-white/10 text-cyan-300'
-                                                : 'bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-800'
+                                                : 'bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400'
                                         }`}
                                     >
                                         <Icon size={24} />
@@ -385,13 +385,13 @@ const AiInActionSection = () => {
     };
 
     return (
-        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
             <Reveal className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-white rounded-2xl p-8 sm:p-12 border border-slate-800 relative overflow-hidden shadow-2xl">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-cyan-500/10 to-fuchsia-500/10 blur-3xl pointer-events-none" />
 
                 <div className="max-w-3xl mx-auto text-center mb-8 relative z-10">
                     <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">Interactive Demo</span>
-                    <h2 className="text-3xl font-extrabold text-white mt-1">EZJOB AI Job Studio in Action</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-white mt-1">EZJOB AI Job Studio in Action</h2>
                     <p className="text-slate-300 text-sm mt-2">Enter a skilled trade title to test the LENIX AI requisition generator.</p>
                 </div>
 
@@ -428,7 +428,7 @@ const AiInActionSection = () => {
 
                     {generatedJD && (
                         <div className="mt-6 p-6 rounded-2xl bg-slate-950/90 border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed shadow-xl">
-                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-[10px] text-cyan-400 font-mono">
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-cyan-400 font-mono">
                                 <span>AI Studio Output</span>
                                 <span>Engine: Gemini 2.5 Flash</span>
                             </div>
@@ -466,9 +466,9 @@ const ComparisonSection = () => {
     ];
 
     return (
-        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
             <Reveal className="text-center max-w-2xl mx-auto mb-10">
-                <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">EZJOB by LENIX vs. Generic Portals</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">EZJOB by LENIX vs. Generic Portals</h2>
             </Reveal>
 
             <Reveal className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
@@ -511,10 +511,10 @@ const TestimonialsSection = () => {
     const { homepageContent } = useSiteContent();
 
     return (
-        <section className="py-16 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
+        <section className="py-20 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
                 <Reveal className="text-center max-w-2xl mx-auto mb-12">
-                    <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white">Endorsed by Industry Leaders</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Endorsed by Industry Leaders</h2>
                 </Reveal>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -545,12 +545,12 @@ const FaqSection = () => {
     const { homepageContent } = useSiteContent();
 
     return (
-        <section className="py-16 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full transition-colors duration-300">
+        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full transition-colors duration-300">
             <Reveal className="text-center mb-10">
                 <span className="font-mono text-xs uppercase tracking-widest text-cyan-700 dark:text-cyan-400 font-bold">
                     Support & Information
                 </span>
-                <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">Frequently Asked Questions</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">Frequently Asked Questions</h2>
             </Reveal>
 
             <div className="space-y-3">
@@ -561,7 +561,7 @@ const FaqSection = () => {
                             className="w-full flex justify-between items-center gap-4 text-left p-5 font-semibold text-slate-900 dark:text-white hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
                             aria-expanded={openIndex === index}
                         >
-                            <span className="text-base">{faq.q}</span>
+                            <span className="text-sm">{faq.q}</span>
                             <span className="shrink-0 w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
                                 {openIndex === index ? <Minus size={14} /> : <Plus size={14} />}
                             </span>
@@ -591,8 +591,8 @@ const FinalCtaSection = () => {
             />
 
             <Reveal className="max-w-4xl mx-auto text-center relative z-10">
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Ready to Deploy or Build Your Career?</h2>
-                <p className="text-slate-300 text-base max-w-xl mx-auto mb-8 leading-relaxed">
+                <h2 className="text-3xl font-bold tracking-tight text-white mb-4">Ready to Deploy or Build Your Career?</h2>
+                <p className="text-slate-300 text-sm max-w-xl mx-auto mb-8 leading-relaxed">
                     Join thousands of verified skilled trades professionals and tier-1 employers on EZJOB by LENIX.
                 </p>
                 <div className="flex flex-wrap justify-center items-center gap-4">
@@ -616,7 +616,7 @@ const FinalCtaSection = () => {
 
 const HomePage: React.FC = () => {
     return (
-        <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
             <HeroSection />
             <HighVelocityRolesSection />
             <FeaturesSection />
