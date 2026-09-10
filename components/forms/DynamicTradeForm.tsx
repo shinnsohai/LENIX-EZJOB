@@ -141,10 +141,11 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
                                     )}
                                     <button
                                         onClick={() => handleRemoveSkill(idx)}
-                                        className="text-slate-400 dark:text-slate-500 hover:text-red-500 p-1"
+                                        className="text-slate-400 dark:text-slate-500 hover:text-red-500 p-2"
                                         title="Remove Skill"
+                                        aria-label={`Remove ${skill.trade || 'this'} skill`}
                                     >
-                                        <Trash2 size={18} />
+                                        <Trash2 size={18} aria-hidden="true" />
                                     </button>
                                 </div>
                             </div>

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getJobById, getWorkerApplications, createApplication } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import Spinner from '../components/Spinner';
 import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift } from 'lucide-react';
 import { UserRole } from '../types';
@@ -12,6 +13,7 @@ export default function JobDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { showToast } = useToast();
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
@@ -57,7 +59,7 @@ export default function JobDetailPage() {
         }
 
         if (user.role !== UserRole.WORKER) {
-            alert("Employer accounts cannot apply for jobs.");
+            showToast("Employer accounts cannot apply for jobs.", 'error');
             return;
         }
 
@@ -67,7 +69,7 @@ export default function JobDetailPage() {
             setHasApplied(true);
         } catch (error: any) {
             console.error("Error applying to job:", error);
-            alert(error.message || "Failed to submit application. Please try again.");
+            showToast(error.message || "Failed to submit application. Please try again.", 'error');
         } finally {
             setApplying(false);
         }

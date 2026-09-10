@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { WorkerProfile, EmployerProfile, BlogPost } from '../types';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { getAllWorkers, getAllEmployers, saveWorkerProfile, saveEmployerProfile, deleteUserAccount, uploadFile } from '../services/db';
 import type { HomepageContent, SiteAssets, Testimonial, FAQ, AboutPageContent, ContactPageContent, CareersPageContent } from '../contexts/SiteContentContext';
 import Spinner from '../components/Spinner';
@@ -13,6 +14,7 @@ type ModalMode = 'CREATE' | 'EDIT' | 'VIEW';
 
 const SiteAssetsManager: React.FC = () => {
     const { user } = useAuth();
+    const { showToast } = useToast();
     const { siteAssets, updateSiteAssets } = useSiteContent();
     const [tempAssets, setTempAssets] = useState<SiteAssets>(siteAssets);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -48,7 +50,7 @@ const SiteAssetsManager: React.FC = () => {
         console.log('Current tempAssets:', tempAssets);
 
         if (!user?.id) {
-            alert('Cannot upload: no authenticated admin session.');
+            showToast('Cannot upload: no authenticated admin session.', 'error');
             setIsUploading(false);
             return;
         }
@@ -85,7 +87,7 @@ const SiteAssetsManager: React.FC = () => {
             setTimeout(() => setShowSuccess(false), 2000);
         } catch (error) {
             console.error('Error uploading assets:', error);
-            alert(`Failed to upload assets: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            showToast(`Failed to upload assets: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
         } finally {
             setIsUploading(false);
         }
@@ -108,7 +110,7 @@ const SiteAssetsManager: React.FC = () => {
             await updateSiteAssets(updatedAssets);
         } catch (error) {
             console.error('Error deleting asset:', error);
-            alert(`Failed to delete asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            showToast(`Failed to delete asset: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
             // Revert local preview since the deletion did not persist.
             setTempAssets(prev => ({ ...prev, [assetType]: tempAssets[assetType] }));
         }
@@ -177,6 +179,7 @@ const SiteAssetsManager: React.FC = () => {
 };
 
 const FrontpageContentManager: React.FC = () => {
+    const { showToast } = useToast();
     const { homepageContent, updateHomepageContent } = useSiteContent();
     const [tempContent, setTempContent] = useState<HomepageContent>(homepageContent);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -211,7 +214,7 @@ const FrontpageContentManager: React.FC = () => {
             setTimeout(() => setShowSuccess(false), 2000);
         } catch (error) {
             console.error('Error saving homepage content:', error);
-            alert('Failed to save content. Please try again.');
+            showToast('Failed to save content. Please try again.', 'error');
         }
     };
 
@@ -280,6 +283,7 @@ const LegalPagesManager: React.FC<{
     initialContent: { privacyPolicy: string; termsOfService: string; };
     onSave: (newContent: { privacyPolicy: string; termsOfService: string; }) => void;
 }> = ({ initialContent, onSave }) => {
+    const { showToast } = useToast();
     const [tempContent, setTempContent] = useState(initialContent);
     const [showSuccess, setShowSuccess] = useState(false);
 
@@ -292,7 +296,7 @@ const LegalPagesManager: React.FC<{
             setTimeout(() => setShowSuccess(false), 2000);
         } catch (error) {
             console.error('Error saving legal pages:', error);
-            alert('Failed to save legal pages. Please try again.');
+            showToast('Failed to save legal pages. Please try again.', 'error');
         }
     };
 
@@ -332,6 +336,7 @@ const LegalPagesManager: React.FC<{
 };
 
 const QuickLinksAndPagesManager: React.FC = () => {
+    const { showToast } = useToast();
     const {
         quickLinks,
         updateQuickLinks,
@@ -368,7 +373,7 @@ const QuickLinksAndPagesManager: React.FC = () => {
             setTimeout(() => setShowSuccess(false), 2000);
         } catch (error) {
             console.error('Error saving quick links:', error);
-            alert('Failed to save links. Please try again.');
+            showToast('Failed to save links. Please try again.', 'error');
         }
     };
 
@@ -389,7 +394,7 @@ const QuickLinksAndPagesManager: React.FC = () => {
             setTimeout(() => setShowSuccess(false), 2000);
         } catch (error) {
             console.error('Error saving page content:', error);
-            alert('Failed to save content. Please try again.');
+            showToast('Failed to save content. Please try again.', 'error');
         }
     };
 
@@ -770,6 +775,7 @@ const USER_PAGE_SIZE = 25;
 const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
     const { user: adminUser } = useAuth();
+    const { showToast } = useToast();
     const [view, setView] = useState<AdminView>('DASHBOARD');
     const [workers, setWorkers] = useState<WorkerProfile[]>([]);
     const [employers, setEmployers] = useState<EmployerProfile[]>([]);
@@ -889,7 +895,7 @@ const AdminDashboard: React.FC = () => {
             setIsModalOpen(false);
         } catch (e) {
             console.error("Admin Save Error", e);
-            alert(e instanceof Error ? e.message : 'Failed to save');
+            showToast(e instanceof Error ? e.message : 'Failed to save', 'error');
         }
     };
 
@@ -901,7 +907,7 @@ const AdminDashboard: React.FC = () => {
                 await deleteBlogPost(post.id);
             } catch (e) {
                 console.error('Admin Delete Error', e);
-                alert(e instanceof Error ? e.message : 'Failed to delete.');
+                showToast(e instanceof Error ? e.message : 'Failed to delete.', 'error');
             }
             return;
         }
@@ -912,7 +918,7 @@ const AdminDashboard: React.FC = () => {
         }
         const userId = type === 'worker' ? (item as WorkerProfile).user_id : (item as EmployerProfile).user_id;
         if (!userId) {
-            alert('Cannot delete: missing linked user id.');
+            showToast('Cannot delete: missing linked user id.', 'error');
             return;
         }
         try {
@@ -920,7 +926,7 @@ const AdminDashboard: React.FC = () => {
             await loadUsers();
         } catch (e) {
             console.error('Admin Delete Error', e);
-            alert(e instanceof Error ? e.message : 'Failed to delete.');
+            showToast(e instanceof Error ? e.message : 'Failed to delete.', 'error');
         }
     };
 
@@ -938,7 +944,7 @@ const AdminDashboard: React.FC = () => {
             await loadUsers();
         } catch (e) {
             console.error('Admin Suspend/Reactivate Error', e);
-            alert(e instanceof Error ? e.message : 'Failed to update status.');
+            showToast(e instanceof Error ? e.message : 'Failed to update status.', 'error');
         }
     };
 

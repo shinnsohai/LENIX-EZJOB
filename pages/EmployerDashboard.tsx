@@ -4,6 +4,7 @@ import Papa from 'papaparse';
 import type { Job, WorkerProfile, EmployerProfile, Application } from '../types';
 import { generateJobWithAI } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import {
     getEmployerProfile,
@@ -43,6 +44,7 @@ const EMPTY_JOB_FORM = {
 
 const SearchWorkersPanel: React.FC = () => {
     const navigate = useNavigate();
+    const { showToast } = useToast();
     const [filters, setFilters] = useState({ skill: '', experience: '', country: '' });
     const [results, setResults] = useState<WorkerProfile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -146,15 +148,15 @@ const SearchWorkersPanel: React.FC = () => {
         });
 
         if (downloadCount === 0) {
-            alert("None of the selected workers have a CV uploaded.");
+            showToast("None of the selected workers have a CV uploaded.", 'error');
         } else if (downloadCount < selectedWorkers.size) {
-            alert(`Opened ${downloadCount} CVs. Some selected workers did not have a CV uploaded.`);
+            showToast(`Opened ${downloadCount} CVs. Some selected workers did not have a CV uploaded.`, 'info');
         }
     };
 
     const handleDownloadSkillPassports = () => {
         if (selectedWorkers.size === 0) {
-            alert("Please select at least one worker.");
+            showToast("Please select at least one worker.", 'error');
             return;
         }
 
@@ -381,8 +383,7 @@ const EmployerDashboard: React.FC = () => {
     const [aiDescription, setAiDescription] = useState('');
     const [aiSkills, setAiSkills] = useState<string[]>([]);
 
-    // Toast notification state
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+    const { showToast } = useToast();
     const [processingAction, setProcessingAction] = useState<string | null>(null);
 
     // Country Dropdown State
@@ -391,12 +392,6 @@ const EmployerDashboard: React.FC = () => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
-
-    // Show toast notification
-    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-        setToast({ message, type });
-        setTimeout(() => setToast(null), 4000);
-    };
 
     // Update currency when country changes
     useEffect(() => {
@@ -453,7 +448,7 @@ const EmployerDashboard: React.FC = () => {
         const title = jobForm.title;
 
         if (!title || title.trim() === '') {
-            alert('Please enter a job title first');
+            showToast('Please enter a job title first', 'error');
             return;
         }
 
@@ -476,7 +471,7 @@ const EmployerDashboard: React.FC = () => {
 
         } catch (error) {
             console.error("Error generating AI content:", error);
-            alert("Failed to generate AI content. Please try again.");
+            showToast("Failed to generate AI content. Please try again.", 'error');
         } finally {
             setIsGeneratingAI(false);
         }
@@ -718,7 +713,7 @@ const EmployerDashboard: React.FC = () => {
             );
         } catch (error) {
             console.error("Error updating status:", error);
-            alert("Failed to update status. Check permissions.");
+            showToast("Failed to update status. Check permissions.", 'error');
         }
     };
 
@@ -729,7 +724,7 @@ const EmployerDashboard: React.FC = () => {
                 setJobs(prevJobs => prevJobs.filter(job => job.id !== jobId));
             } catch (error) {
                 console.error("Error deleting job:", error);
-                alert("Failed to delete job. Check permissions.");
+                showToast("Failed to delete job. Check permissions.", 'error');
             }
         }
     };
@@ -794,7 +789,7 @@ const EmployerDashboard: React.FC = () => {
             setLogoFile(null);
         } catch (error: any) {
             console.error("Error saving profile:", error);
-            alert(`Failed to save profile: ${error.message}`);
+            showToast(`Failed to save profile: ${error.message}`, 'error');
         } finally {
             setIsLoading(false);
         }
@@ -806,7 +801,7 @@ const EmployerDashboard: React.FC = () => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             if (file.size > CSV_MAX_SIZE_BYTES) {
-                alert('CSV file is too large. Please keep it under 2MB.');
+                showToast('CSV file is too large. Please keep it under 2MB.', 'error');
                 e.target.value = '';
                 return;
             }
@@ -841,17 +836,17 @@ const EmployerDashboard: React.FC = () => {
 
     const handleCsvImport = async () => {
         if (!csvFile) {
-            alert('Please select a CSV file first');
+            showToast('Please select a CSV file first', 'error');
             return;
         }
 
         if (!user) {
-            alert('You must be logged in to import jobs');
+            showToast('You must be logged in to import jobs', 'error');
             return;
         }
 
         if (csvFile.size > CSV_MAX_SIZE_BYTES) {
-            alert('CSV file is too large. Please keep it under 2MB.');
+            showToast('CSV file is too large. Please keep it under 2MB.', 'error');
             return;
         }
 
@@ -936,7 +931,7 @@ const EmployerDashboard: React.FC = () => {
             }
 
         } catch (error: any) {
-            alert(`Failed to parse CSV: ${error.message}`);
+            showToast(`Failed to parse CSV: ${error.message}`, 'error');
         } finally {
             setIsImporting(false);
         }
@@ -1768,44 +1763,6 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                 </div>
             )}
 
-            {/* Toast Notification */}
-            {toast && (
-                <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
-                    <div className={`px-6 py-4 rounded-lg shadow-2xl border-l-4 flex items-start gap-3 max-w-md ${toast.type === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-900' :
-                        toast.type === 'error' ? 'bg-red-50 border-red-500 text-red-900' :
-                            'bg-blue-50 border-blue-500 text-blue-900'
-                        }`}>
-                        <div className="flex-shrink-0 mt-0.5">
-                            {toast.type === 'success' && (
-                                <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            )}
-                            {toast.type === 'error' && (
-                                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            )}
-                            {toast.type === 'info' && (
-                                <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            )}
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-medium leading-relaxed">{toast.message}</p>
-                        </div>
-                        <button
-                            onClick={() => setToast(null)}
-                            className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            )}
         </>
     );
 };

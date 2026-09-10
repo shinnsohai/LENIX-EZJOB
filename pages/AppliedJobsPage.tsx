@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { getWorkerApplications, withdrawApplication } from '../services/db';
 import Spinner from '../components/Spinner';
@@ -19,6 +20,7 @@ const getStatusColor = (status: Application['status']) => {
 
 export default function AppliedJobsPage() {
     const { user } = useAuth();
+    const { showToast } = useToast();
     const navigate = useNavigate();
     const [applications, setApplications] = useState<Application[]>([]);
     const [filteredApplications, setFilteredApplications] = useState<Application[]>([]);
@@ -82,7 +84,7 @@ export default function AppliedJobsPage() {
             setApplications(prev => prev.map(app => app.id === id ? { ...app, status: 'Withdrawn' } : app));
         } catch (error) {
             console.error("Error withdrawing application:", error);
-            alert("Failed to withdraw application. Please try again.");
+            showToast("Failed to withdraw application. Please try again.", 'error');
         } finally {
             setWithdrawingId(null);
         }

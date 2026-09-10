@@ -6,6 +6,7 @@ import { UserRole } from './types';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SiteContentProvider } from './contexts/SiteContentContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
@@ -69,6 +70,7 @@ function App() {
     return (
         <ErrorBoundary>
             <ThemeProvider>
+                <ToastProvider>
                 <AuthProvider>
                     <SiteContentProvider>
                         <BrowserRouter>
@@ -146,6 +148,7 @@ function App() {
                         </BrowserRouter>
                     </SiteContentProvider>
                 </AuthProvider>
+                </ToastProvider>
             </ThemeProvider>
         </ErrorBoundary>
     );

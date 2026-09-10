@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import {
     getWorkerProfile,
     saveWorkerProfile,
@@ -25,6 +26,7 @@ import { countries } from '../data/countries';
 
 export default function WorkerDashboard() {
     const { user } = useAuth();
+    const { showToast } = useToast();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -166,15 +168,15 @@ export default function WorkerDashboard() {
             }
         } catch (e) {
             console.error(e);
-            alert("Failed to save profile");
+            showToast("Failed to save profile", 'error');
         }
         setLoading(false);
     };
 
     const handleAddProject = async () => {
         if (!profile.id || !newProject.project_name) {
-            if (!profile.id) alert("Please save your profile first (Step 1) before adding work history.");
-            else alert("Project name is required.");
+            if (!profile.id) showToast("Please save your profile first (Step 1) before adding work history.", 'error');
+            else showToast("Project name is required.", 'error');
             return;
         }
 
@@ -183,17 +185,17 @@ export default function WorkerDashboard() {
                 // Update existing project
                 await updateWorkerProject(newProject.id, newProject);
                 setProjects(prev => prev.map(p => p.id === newProject.id ? { ...p, ...newProject } as Project : p));
-                alert("Project updated successfully!");
+                showToast("Project updated successfully!", 'success');
             } else {
                 // Add new project
                 const newId = await addWorkerProject(profile.id, newProject as Omit<Project, 'id'>);
                 const projectWithId = { ...newProject, id: newId } as Project;
                 setProjects(prev => [...prev, projectWithId]);
-                alert("Project added successfully!");
+                showToast("Project added successfully!", 'success');
             }
             setNewProject({});
         } catch (e) {
-            alert("Error saving project.");
+            showToast("Error saving project.", 'error');
         }
     }
 
@@ -220,13 +222,13 @@ export default function WorkerDashboard() {
             setProjects(prev => prev.filter(p => p.id !== projectId));
         } catch (e) {
             console.error("Error deleting project:", e);
-            alert("Failed to delete project.");
+            showToast("Failed to delete project.", 'error');
         }
     };
 
     const handleAddCert = async () => {
         if (!profile.id || !newCert.cert_name) {
-            if (!profile.id) alert("Please save your profile first (Step 1) before adding certifications.");
+            if (!profile.id) showToast("Please save your profile first (Step 1) before adding certifications.", 'error');
             return;
         }
         const uid = user?.id;
@@ -234,7 +236,7 @@ export default function WorkerDashboard() {
 
         // Validate File Size (2MB = 2 * 1024 * 1024 bytes)
         if (certFile && certFile.size > 2 * 1024 * 1024) {
-            alert("File size exceeds 2MB. Please upload a smaller file.");
+            showToast("File size exceeds 2MB. Please upload a smaller file.", 'error');
             return;
         }
 
@@ -243,7 +245,7 @@ export default function WorkerDashboard() {
             try {
                 downloadUrl = await uploadFile('worker-cert-docs', uid, certFile);
             } catch (e) {
-                alert("Failed to upload certificate file");
+                showToast("Failed to upload certificate file", 'error');
                 return;
             }
         }
@@ -273,7 +275,7 @@ export default function WorkerDashboard() {
             if (fileInput) fileInput.value = '';
 
         } catch (e) {
-            alert("Error adding certification.");
+            showToast("Error adding certification.", 'error');
             console.error(e);
         }
     }
@@ -301,7 +303,7 @@ export default function WorkerDashboard() {
             await deleteWorkerCertification(certId);
         } catch (e) {
             console.error("Error deleting certification:", e);
-            alert("Failed to delete certification from database. Refreshing list.");
+            showToast("Failed to delete certification from database. Refreshing list.", 'error');
             // Revert / Refresh if failed
             if (profile.id) {
                 const updated = await getWorkerCertifications(profile.id);
@@ -314,7 +316,7 @@ export default function WorkerDashboard() {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             if (file.size > 5 * 1024 * 1024) {
-                alert("File size must be less than 5MB");
+                showToast("File size must be less than 5MB", 'error');
                 return;
             }
             const uid = user?.id;
@@ -326,10 +328,10 @@ export default function WorkerDashboard() {
                 const updatedProfile = { ...profile, cv_url: downloadUrl, user_id: uid };
                 await saveWorkerProfile(updatedProfile);
                 setProfile(updatedProfile);
-                alert("CV Uploaded Successfully!");
+                showToast("CV Uploaded Successfully!", 'success');
             } catch (error) {
                 console.error("Error uploading CV:", error);
-                alert("Failed to upload CV.");
+                showToast("Failed to upload CV.", 'error');
             } finally {
                 setLoading(false);
                 if (cvInputRef.current) cvInputRef.current.value = '';
@@ -595,10 +597,11 @@ export default function WorkerDashboard() {
                                     </a>
                                     <button
                                         onClick={() => setProfile({ ...profile, cv_url: '' })}
-                                        className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                        className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-2 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
                                         title="Remove CV"
+                                        aria-label="Remove uploaded CV"
                                     >
-                                        <Trash2 size={18} />
+                                        <Trash2 size={18} aria-hidden="true" />
                                     </button>
                                 </div>
                             </div>
@@ -645,10 +648,11 @@ export default function WorkerDashboard() {
                                     <button
                                         type="button"
                                         onClick={() => handleDeleteCert(c.id)}
-                                        className={`transition-all duration-200 p-1 rounded ${deleteConfirmCertId === c.id ? 'bg-red-600 text-white px-3' : 'text-red-500 hover:text-red-700 hover:bg-red-50'}`}
+                                        className={`transition-all duration-200 p-2 rounded ${deleteConfirmCertId === c.id ? 'bg-red-600 text-white px-3' : 'text-red-500 hover:text-red-700 hover:bg-red-50'}`}
                                         title="Delete Certification"
+                                        aria-label={deleteConfirmCertId === c.id ? `Confirm delete ${c.cert_name || 'certification'}` : `Delete ${c.cert_name || 'certification'}`}
                                     >
-                                        {deleteConfirmCertId === c.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
+                                        {deleteConfirmCertId === c.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} aria-hidden="true" />}
                                     </button>
                                 </div>
                             </div>
@@ -733,17 +737,19 @@ export default function WorkerDashboard() {
                                     <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                         <button
                                             onClick={() => handleEditProject(p)}
-                                            className="p-1 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
+                                            className="p-2 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded"
                                             title="Edit"
+                                            aria-label={`Edit ${p.project_name || 'project'}`}
                                         >
-                                            <Edit3 size={16} />
+                                            <Edit3 size={16} aria-hidden="true" />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteProject(p.id)}
-                                            className={`p-1 rounded transition-all duration-200 ${deleteConfirmProjectId === p.id ? 'bg-red-600 text-white px-3' : 'text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'}`}
+                                            className={`p-2 rounded transition-all duration-200 ${deleteConfirmProjectId === p.id ? 'bg-red-600 text-white px-3' : 'text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'}`}
                                             title="Delete"
+                                            aria-label={deleteConfirmProjectId === p.id ? `Confirm delete ${p.project_name || 'project'}` : `Delete ${p.project_name || 'project'}`}
                                         >
-                                            {deleteConfirmProjectId === p.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} />}
+                                            {deleteConfirmProjectId === p.id ? <span className="text-xs font-bold">Confirm?</span> : <Trash2 size={16} aria-hidden="true" />}
                                         </button>
                                     </div>
                                 </div>
