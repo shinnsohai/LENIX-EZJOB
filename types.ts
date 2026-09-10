@@ -140,6 +140,44 @@ export interface Job {
     transport_details?: string; // pickup points / shuttle info
     accommodation_provided?: boolean;
     accommodation_details?: string; // dormitory / housing allowance info
+
+    // Async translation workflow: never written by an in-app LLM call. The
+    // employer exports jobs to CSV, translates/optimizes offline in their
+    // own batch process (a few times a week), and re-imports the result —
+    // see JobTranslationsCsvRow below. Keyed by short language code (e.g.
+    // 'zh', 'bn', 'ta', 'ms', 'my'); every field within one language is
+    // optional so a partial translation still renders (falls back to the
+    // base English field for anything missing).
+    translations?: Record<string, {
+        title?: string;
+        description?: string;
+        required_skills?: string[];
+        shift_schedule?: string;
+        perks?: string;
+        qualifying_questions?: string[];
+    }>;
+
+    // Position fulfillment. available_positions is set by the employer at
+    // posting time (undefined = not tracked, the default for every existing
+    // job). positions_filled is server-maintained — it only ever changes via
+    // the applications_sync_job_positions DB trigger when an applicant's
+    // status transitions to/from 'Hired'; never write it directly from the
+    // client.
+    available_positions?: number;
+    positions_filled?: number;
+}
+
+/** One row of the translations CSV: one job x one language per row. */
+export interface JobTranslationsCsvRow {
+    job_id: string;
+    job_title: string; // reference only, ignored on import
+    language_code: string;
+    title: string;
+    description: string;
+    required_skills: string; // ';'-separated, matching the job-import CSV convention
+    shift_schedule: string;
+    perks: string;
+    qualifying_questions: string; // newline-separated, matching the job form's convention
 }
 
 export interface Application {
@@ -147,7 +185,7 @@ export interface Application {
     job_id: string;
     worker_id: string;
     employer_id: string;
-    status: 'Submitted' | 'Viewed' | 'Shortlisted' | 'Rejected' | 'Withdrawn';
+    status: 'Submitted' | 'Viewed' | 'Shortlisted' | 'Rejected' | 'Withdrawn' | 'Hired';
     job_title: string;
     employer_name: string;
     location: string;

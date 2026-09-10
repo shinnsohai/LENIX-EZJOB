@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
-import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home } from 'lucide-react';
+import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home, Users } from 'lucide-react';
 import { formatSalaryRange } from '../data/currencies';
 
 const TRADE_CATEGORIES = [
@@ -99,6 +99,12 @@ const JobCard: React.FC<{
                                     <Home size={14} className="text-cyan-600 dark:text-cyan-400" /> Housing
                                 </span>
                             )}
+                        </div>
+                    )}
+                    {job.available_positions !== undefined && (
+                        <div className="flex items-center gap-1.5">
+                            <Users size={14} className="text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+                            <span>{Math.max(0, job.available_positions - (job.positions_filled ?? 0))} of {job.available_positions} open</span>
                         </div>
                     )}
                     {job.createdAt && (

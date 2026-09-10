@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
-import type { Job, WorkerProfile, EmployerProfile, Application } from '../types';
+import type { Job, WorkerProfile, EmployerProfile, Application, JobTranslationsCsvRow } from '../types';
 import { generateJobWithAI } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -17,10 +17,12 @@ import {
     searchWorkersInDb,
     getJobApplicants,
     updateApplicationStatus,
+    getApplicantCounts,
 } from '../services/db';
 import Spinner from '../components/Spinner';
 import { countries, Country } from '../data/countries';
 import { getCurrencyForCountry, formatSalaryRange } from '../data/currencies';
+import { TRANSLATION_LANGUAGES } from '../data/languages';
 
 type View = 'DASHBOARD' | 'NEW_JOB' | 'EDIT_JOB' | 'APPLICANTS';
 type JobStatus = 'Active' | 'On Hold' | 'Closed';
@@ -40,6 +42,7 @@ const EMPTY_JOB_FORM = {
     transport_details: '',
     accommodation_provided: false,
     accommodation_details: '',
+    available_positions: '', // blank = not tracked; positions_filled is server-maintained
 };
 
 const SearchWorkersPanel: React.FC = () => {
@@ -351,6 +354,7 @@ const EmployerDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [view, setView] = useState<View>('DASHBOARD');
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
     const [workers, setWorkers] = useState<WorkerProfile[]>([]);
     // Maps worker user_id -> {applicationId, status} for the job currently
     // being viewed in the Applicants tab. getJobApplicants only returns
@@ -377,6 +381,13 @@ const EmployerDashboard: React.FC = () => {
     const [csvFile, setCsvFile] = useState<File | null>(null);
     const [csvImportStatus, setCsvImportStatus] = useState<{ success: number; failed: number; errors: string[] }>({ success: 0, failed: 0, errors: [] });
     const [isImporting, setIsImporting] = useState(false);
+
+    // Translations re-import (the other half of the async translation
+    // workflow — see handleExportTranslationsCsv above).
+    const [showTranslationsModal, setShowTranslationsModal] = useState(false);
+    const [translationsFile, setTranslationsFile] = useState<File | null>(null);
+    const [translationsImportStatus, setTranslationsImportStatus] = useState<{ success: number; failed: number; errors: string[] }>({ success: 0, failed: 0, errors: [] });
+    const [isImportingTranslations, setIsImportingTranslations] = useState(false);
 
     // AI Generation State
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -419,6 +430,7 @@ const EmployerDashboard: React.FC = () => {
                         const jobsData = await getJobs({ employerId: user.id });
                         console.log("Jobs loaded in Dashboard:", jobsData.length);
                         setJobs(jobsData);
+                        setApplicantCounts(await getApplicantCounts(jobsData.map(j => j.id)));
                     }
                 } catch (err: any) {
                     console.error("Failed to load dashboard data:", err);
@@ -531,6 +543,15 @@ const EmployerDashboard: React.FC = () => {
                 .filter(Boolean)
                 .slice(0, 3);
 
+            const available_positions = jobForm.available_positions.trim()
+                ? parseInt(jobForm.available_positions, 10)
+                : undefined;
+            if (available_positions !== undefined && (isNaN(available_positions) || available_positions < 1)) {
+                showToast('Available positions must be a whole number of 1 or more.', 'error');
+                setIsLoading(false);
+                return;
+            }
+
             const newJob: Omit<Job, 'id'> = {
                 employer_id: user.id,
                 employer_name: company,
@@ -551,6 +572,7 @@ const EmployerDashboard: React.FC = () => {
                 transport_details: jobForm.transport_details.trim() || undefined,
                 accommodation_provided: jobForm.accommodation_provided,
                 accommodation_details: jobForm.accommodation_details.trim() || undefined,
+                available_positions,
             };
 
             console.log("Creating job in DB:", newJob);
@@ -586,6 +608,15 @@ const EmployerDashboard: React.FC = () => {
                 return;
             }
 
+            const available_positions = jobForm.available_positions.trim()
+                ? parseInt(jobForm.available_positions, 10)
+                : undefined;
+            if (available_positions !== undefined && (isNaN(available_positions) || available_positions < 1)) {
+                showToast('Available positions must be a whole number of 1 or more.', 'error');
+                setIsLoading(false);
+                return;
+            }
+
             const updatedData: Partial<Job> = {
                 title: jobForm.title,
                 location: jobForm.location,
@@ -607,6 +638,7 @@ const EmployerDashboard: React.FC = () => {
                 transport_details: jobForm.transport_details.trim() || undefined,
                 accommodation_provided: jobForm.accommodation_provided,
                 accommodation_details: jobForm.accommodation_details.trim() || undefined,
+                available_positions,
             };
 
             await updateJob(selectedJob.id, updatedData);
@@ -638,6 +670,7 @@ const EmployerDashboard: React.FC = () => {
             transport_details: job.transport_details ?? '',
             accommodation_provided: job.accommodation_provided ?? false,
             accommodation_details: job.accommodation_details ?? '',
+            available_positions: job.available_positions !== undefined ? String(job.available_positions) : '',
         });
         setView('EDIT_JOB');
     };
@@ -676,6 +709,30 @@ const EmployerDashboard: React.FC = () => {
         } catch (error: any) {
             console.error("Error shortlisting applicant:", error);
             showToast(error.message || 'Failed to shortlist applicant. Please try again.', 'error');
+        } finally {
+            setProcessingAction(null);
+        }
+    };
+
+    const handleHire = async (worker: WorkerProfile) => {
+        const meta = applicantMeta.get(worker.user_id);
+        if (!meta) return;
+        if (!window.confirm(`Mark ${worker.full_name} as hired? This fills one position on this job and can't be undone from here.`)) return;
+
+        setProcessingAction(`hire-${worker.id}`);
+        try {
+            await updateApplicationStatus(meta.applicationId, 'Hired');
+            setApplicantMeta(prev => new Map(prev).set(worker.user_id, { ...meta, status: 'Hired' }));
+            showToast(`${worker.full_name} marked as hired.`, 'success');
+            // positions_filled is server-maintained (DB trigger) — refresh the
+            // job list so the "X of Y filled" count on the dashboard is current.
+            if (user) {
+                const jobsData = await getJobs({ employerId: user.id });
+                setJobs(jobsData);
+            }
+        } catch (error: any) {
+            console.error("Error hiring applicant:", error);
+            showToast(error.message || 'Failed to mark applicant as hired. Please try again.', 'error');
         } finally {
             setProcessingAction(null);
         }
@@ -954,6 +1011,174 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
         window.URL.revokeObjectURL(url);
     };
 
+    const TRANSLATIONS_CSV_MAX_SIZE_BYTES = 5 * 1024 * 1024; // wider than job-import: N jobs x 5 languages
+
+    const handleTranslationsFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (file.size > TRANSLATIONS_CSV_MAX_SIZE_BYTES) {
+                showToast('CSV file is too large. Please keep it under 5MB.', 'error');
+                e.target.value = '';
+                return;
+            }
+            setTranslationsFile(file);
+        }
+    };
+
+    const parseTranslationsCsvFile = (file: File): Promise<Record<string, string>[]> => {
+        return new Promise((resolve, reject) => {
+            Papa.parse<Record<string, string>>(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    if (results.errors.length > 0) {
+                        const first = results.errors[0];
+                        reject(new Error(`CSV parse error on row ${(first.row ?? 0) + 2}: ${first.message}`));
+                        return;
+                    }
+                    if (results.data.length === 0) {
+                        reject(new Error('CSV file must contain at least a header row and one data row'));
+                        return;
+                    }
+                    resolve(results.data);
+                },
+                error: (error: Error) => reject(error),
+            });
+        });
+    };
+
+    /**
+     * Re-imports a translations CSV (see handleExportTranslationsCsv). Rows
+     * are grouped by job_id first — a job's translations column is one jsonb
+     * write, not one write per language, so every row for the same job is
+     * merged in memory before a single updateJob call, and a language with
+     * both title and description left blank is skipped rather than
+     * clobbering an existing translation with empty strings.
+     */
+    const handleTranslationsCsvImport = async () => {
+        if (!translationsFile) {
+            showToast('Please select a CSV file first', 'error');
+            return;
+        }
+        if (!user) {
+            showToast('You must be logged in to import translations', 'error');
+            return;
+        }
+
+        setIsImportingTranslations(true);
+        setTranslationsImportStatus({ success: 0, failed: 0, errors: [] });
+
+        try {
+            const rows = await parseTranslationsCsvFile(translationsFile);
+            const byJob = new Map<string, Record<string, string>[]>();
+            const rowErrors: string[] = [];
+
+            rows.forEach((row, i) => {
+                if (!row.job_id || !row.language_code) {
+                    rowErrors.push(`Row ${i + 2}: missing job_id or language_code`);
+                    return;
+                }
+                if (!(row.title || '').trim() && !(row.description || '').trim()) {
+                    return; // nothing translated for this language yet — skip, don't overwrite
+                }
+                if (!byJob.has(row.job_id)) byJob.set(row.job_id, []);
+                byJob.get(row.job_id)!.push(row);
+            });
+
+            let successCount = 0;
+            let failedCount = rowErrors.length;
+            const errors = [...rowErrors];
+
+            for (const [jobId, jobRows] of byJob) {
+                const job = jobs.find(j => j.id === jobId);
+                if (!job) {
+                    failedCount += jobRows.length;
+                    errors.push(`job_id ${jobId}: not found among your job postings`);
+                    continue;
+                }
+                try {
+                    const merged = { ...(job.translations ?? {}) };
+                    jobRows.forEach(row => {
+                        merged[row.language_code] = {
+                            title: row.title || undefined,
+                            description: row.description || undefined,
+                            required_skills: row.required_skills
+                                ? row.required_skills.split(';').map(s => s.trim()).filter(Boolean)
+                                : undefined,
+                            shift_schedule: row.shift_schedule || undefined,
+                            perks: row.perks || undefined,
+                            qualifying_questions: row.qualifying_questions
+                                ? row.qualifying_questions.split('\n').map(s => s.trim()).filter(Boolean)
+                                : undefined,
+                        };
+                    });
+                    await updateJob(jobId, { translations: merged });
+                    successCount += jobRows.length;
+                } catch (error: any) {
+                    failedCount += jobRows.length;
+                    errors.push(`"${job.title}": ${error.message || 'failed to save translations'}`);
+                }
+            }
+
+            setTranslationsImportStatus({ success: successCount, failed: failedCount, errors });
+
+            if (successCount > 0 && user) {
+                const jobsData = await getJobs({ employerId: user.id });
+                setJobs(jobsData);
+            }
+        } catch (error: any) {
+            showToast(`Failed to parse CSV: ${error.message}`, 'error');
+        } finally {
+            setIsImportingTranslations(false);
+        }
+    };
+
+    /** Triggers a browser download for CSV text — shared by both exports below. */
+    const downloadCsvText = (csvText: string, filename: string) => {
+        const blob = new Blob([csvText], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+
+    /**
+     * Exports every one of this employer's jobs x the curated language list
+     * as a translations template: one row per (job, language) pair,
+     * pre-filled with any translation already on file. This — not an in-app
+     * LLM call — is the hand-off point for the async translation workflow:
+     * the employer runs this file through an LLM offline (a few times a
+     * week) and re-imports it via handleTranslationsCsvImport below.
+     */
+    const handleExportTranslationsCsv = () => {
+        if (jobs.length === 0) {
+            showToast('No jobs to export yet.', 'error');
+            return;
+        }
+        const rows: JobTranslationsCsvRow[] = [];
+        jobs.forEach(job => {
+            TRANSLATION_LANGUAGES.forEach(({ code }) => {
+                const existing = job.translations?.[code];
+                rows.push({
+                    job_id: job.id,
+                    job_title: job.title,
+                    language_code: code,
+                    title: existing?.title ?? '',
+                    description: existing?.description ?? '',
+                    required_skills: (existing?.required_skills ?? []).join(';'),
+                    shift_schedule: existing?.shift_schedule ?? '',
+                    perks: existing?.perks ?? '',
+                    qualifying_questions: (existing?.qualifying_questions ?? []).join('\n'),
+                });
+            });
+        });
+        downloadCsvText(Papa.unparse(rows), 'job_translations.csv');
+    };
+
     const CountryDropdown = () => {
         const filteredCountries = countries.filter(
             c =>
@@ -1074,6 +1299,12 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         <p className="text-sm text-gray-500">{job.employer_name} &middot; {job.location}, {job.country}</p>
                                         <p className="text-sm font-semibold text-emerald-600 mt-1">
                                             {formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr
+                                        </p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {applicantCounts[job.id] ?? 0} applicant{(applicantCounts[job.id] ?? 0) === 1 ? '' : 's'}
+                                            {job.available_positions !== undefined && (
+                                                <> &middot; {job.positions_filled ?? 0} of {job.available_positions} position{job.available_positions === 1 ? '' : 's'} filled</>
+                                            )}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -1369,6 +1600,24 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                     </div>
 
                                     <div className="mt-6">
+                                        <label htmlFor="available_positions" className="block text-sm font-medium text-gray-700">
+                                            Available Positions <span className="text-gray-500">(optional)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            name="available_positions"
+                                            id="available_positions"
+                                            value={jobForm.available_positions}
+                                            onChange={e => setJobForm({ ...jobForm, available_positions: e.target.value })}
+                                            placeholder="e.g., 5"
+                                            className="mt-1 block w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Leave blank if you're not tracking headcount. Marking an applicant "Hired" fills one position; the job auto-closes once all are filled.</p>
+                                    </div>
+
+                                    <div className="mt-6">
                                         <label htmlFor="whatsapp_number" className="block text-sm font-medium text-gray-700">
                                             WhatsApp Quick-Apply Number <span className="text-gray-500">(optional)</span>
                                         </label>
@@ -1436,12 +1685,16 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                     {workers.map(app => {
                                         const meta = applicantMeta.get(app.user_id);
                                         const isShortlisted = meta?.status === 'Shortlisted';
+                                        const isHired = meta?.status === 'Hired';
                                         return (
                                         <div key={app.id} className="bg-white p-4 rounded-lg shadow-md">
                                             <div className="flex items-start">
                                                 <div className="ml-4 flex-grow">
                                                     <div className="flex items-center gap-2">
                                                         <h3 className="font-bold text-lg">{app.full_name}</h3>
+                                                        {isHired && (
+                                                            <span className="bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full">Hired</span>
+                                                        )}
                                                         {isShortlisted && (
                                                             <span className="bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full">Shortlisted</span>
                                                         )}
@@ -1493,6 +1746,21 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                                     ) : isShortlisted ? 'Shortlisted' : 'Shortlist'}
                                                 </button>
                                                 <button
+                                                    onClick={() => handleHire(app)}
+                                                    disabled={processingAction === `hire-${app.id}` || isHired}
+                                                    className={`bg-blue-100 text-blue-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-blue-200 transition-all duration-200 disabled:opacity-50 ${processingAction === `hire-${app.id}` ? 'cursor-not-allowed animate-pulse' : ''}`}
+                                                >
+                                                    {processingAction === `hire-${app.id}` ? (
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            Processing...
+                                                        </span>
+                                                    ) : isHired ? 'Hired' : 'Hire'}
+                                                </button>
+                                                <button
                                                     onClick={() => handleReject(app)}
                                                     disabled={processingAction === `reject-${app.id}`}
                                                     className={`bg-red-100 text-red-800 text-xs font-bold py-1 px-3 rounded-md hover:bg-red-200 transition-all duration-200 ${processingAction === `reject-${app.id}` ? 'opacity-50 cursor-not-allowed animate-pulse' : ''}`}
@@ -1538,6 +1806,26 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                     </svg>
                                     Import CSV
+                                </button>
+                                <button
+                                    onClick={handleExportTranslationsCsv}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors flex items-center gap-2 border border-slate-300 shadow-sm"
+                                    title="Download a CSV template (your jobs x common languages) to translate offline"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Export Translations
+                                </button>
+                                <button
+                                    onClick={() => setShowTranslationsModal(true)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-full transition-colors flex items-center gap-2 border border-slate-300 shadow-sm"
+                                    title="Re-upload a translated CSV to publish it on the job pages"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Import Translations
                                 </button>
                                 <button
                                     onClick={() => { setJobForm(EMPTY_JOB_FORM); setView('NEW_JOB'); }}
@@ -1756,6 +2044,109 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         </>
                                     ) : (
                                         'Import Jobs'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Translations Import Modal */}
+            {showTranslationsModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div role="dialog" aria-modal="true" aria-labelledby="translations-import-modal-title" className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 id="translations-import-modal-title" className="text-2xl font-bold text-gray-900">Import Translations</h2>
+                                <button
+                                    onClick={() => { setShowTranslationsModal(false); setTranslationsFile(null); setTranslationsImportStatus({ success: 0, failed: 0, errors: [] }); }}
+                                    aria-label="Close dialog"
+                                    className="text-gray-400 hover:text-gray-600 p-1">
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-2">CSV Format</h3>
+                                <p className="text-sm text-gray-600 mb-3">
+                                    Start from <strong>Export Translations</strong> — it downloads a CSV with a row per job per language, pre-filled with anything already translated. Fill in <strong>title, description, required_skills</strong> (semicolon-separated), <strong>shift_schedule, perks</strong> and <strong>qualifying_questions</strong> (newline-separated) for each language, then re-upload the same file here. Rows left blank for a language are skipped, not overwritten. Never edit <strong>job_id</strong> or <strong>language_code</strong>.
+                                </p>
+                                <button
+                                    onClick={handleExportTranslationsCsv}
+                                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Download Current Template
+                                </button>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleTranslationsFileChange}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 border border-gray-300 rounded-md cursor-pointer">
+                                </input>
+                                {translationsFile && (
+                                    <p className="mt-2 text-sm text-gray-600">
+                                        Selected: <span className="font-medium">{translationsFile.name}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {translationsImportStatus.success > 0 || translationsImportStatus.failed > 0 ? (
+                                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                                    <h4 className="font-semibold text-gray-800 mb-2">Import Results</h4>
+                                    <div className="space-y-2">
+                                        {translationsImportStatus.success > 0 && (
+                                            <p className="text-sm text-green-600">
+                                                ✓ Successfully imported {translationsImportStatus.success} translation(s)
+                                            </p>
+                                        )}
+                                        {translationsImportStatus.failed > 0 && (
+                                            <div>
+                                                <p className="text-sm text-red-600 font-medium">
+                                                    ✗ Failed to import {translationsImportStatus.failed} translation(s)
+                                                </p>
+                                                {translationsImportStatus.errors.length > 0 && (
+                                                    <div className="mt-2 max-h-32 overflow-y-auto">
+                                                        <p className="text-xs text-gray-600 font-semibold mb-1">Errors:</p>
+                                                        {translationsImportStatus.errors.map((error, idx) => (
+                                                            <p key={idx} className="text-xs text-red-500">• {error}</p>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => { setShowTranslationsModal(false); setTranslationsFile(null); setTranslationsImportStatus({ success: 0, failed: 0, errors: [] }); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleTranslationsCsvImport}
+                                    disabled={!translationsFile || isImportingTranslations}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+                                    {isImportingTranslations ? (
+                                        <>
+                                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Importing...
+                                        </>
+                                    ) : (
+                                        'Import Translations'
                                     )}
                                 </button>
                             </div>

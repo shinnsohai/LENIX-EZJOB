@@ -5,10 +5,11 @@ import { getJobById, getWorkerApplications, createApplication } from '../service
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import Spinner from '../components/Spinner';
-import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift } from 'lucide-react';
+import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift, Languages, Users } from 'lucide-react';
 import { UserRole } from '../types';
 import type { Job } from '../types';
 import { formatSalaryRange } from '../data/currencies';
+import { TRANSLATION_LANGUAGES, languageLabel } from '../data/languages';
 
 export default function JobDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -22,6 +23,11 @@ export default function JobDetailPage() {
     // Qualifying questions act as a lightweight screening checklist in place
     // of a cover letter — candidates confirm each one before applying.
     const [confirmedQuestions, setConfirmedQuestions] = useState<Set<number>>(new Set());
+    // 'en' = the job's own base-language fields. Anything else reads from
+    // job.translations, populated offline via the employer's CSV export/
+    // import round-trip (never generated in-app) — falling back per-field
+    // to the base content when a translation is missing or incomplete.
+    const [locale, setLocale] = useState<string>('en');
 
     const fetchJob = useCallback(async () => {
         if (!id) return;
@@ -90,7 +96,21 @@ export default function JobDetailPage() {
         });
     };
 
-    const questions = job?.qualifying_questions ?? [];
+    // Only offer languages that actually have a translation on file for this
+    // job — an empty switcher option that falls straight back to English
+    // isn't a real choice.
+    const availableLanguages = TRANSLATION_LANGUAGES.filter(l => job?.translations?.[l.code]);
+    const t = locale !== 'en' ? job?.translations?.[locale] : undefined;
+    const displayJob = job ? {
+        title: t?.title || job.title,
+        description: t?.description || job.description,
+        required_skills: t?.required_skills?.length ? t.required_skills : job.required_skills,
+        shift_schedule: t?.shift_schedule || job.shift_schedule,
+        perks: t?.perks || job.perks,
+        qualifying_questions: t?.qualifying_questions?.length ? t.qualifying_questions : job.qualifying_questions,
+    } : null;
+
+    const questions = displayJob?.qualifying_questions ?? [];
     const allQuestionsConfirmed = questions.length === 0 || confirmedQuestions.size === questions.length;
 
     const whatsappHref = job?.whatsapp_number
@@ -107,7 +127,7 @@ export default function JobDetailPage() {
         );
     }
 
-    if (!job) {
+    if (!job || !displayJob) {
         return (
             <div className="container mx-auto px-4 py-8">
                 <div className="text-center">
@@ -137,7 +157,7 @@ export default function JobDetailPage() {
             <div className="max-w-4xl mx-auto">
                 {/* Job Header */}
                 <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-                    <div className="flex justify-between items-start mb-6">
+                    <div className="flex justify-between items-start mb-6 gap-4">
                         <div className="flex-1">
                             <button
                                 onClick={handleViewCompany}
@@ -146,7 +166,7 @@ export default function JobDetailPage() {
                                 <Building2 size={20} className="inline mr-2" />
                                 {job.employer_name}
                             </button>
-                            <h1 className="text-4xl font-bold text-slate-900 mb-4">{job.title}</h1>
+                            <h1 className="text-4xl font-bold text-slate-900 mb-4">{displayJob.title}</h1>
 
                             <div className="flex flex-wrap gap-4 text-slate-600">
                                 <div className="flex items-center gap-2">
@@ -163,10 +183,16 @@ export default function JobDetailPage() {
                                         {job.status}
                                     </span>
                                 </div>
-                                {job.shift_schedule && (
+                                {job.available_positions !== undefined && (
+                                    <div className="flex items-center gap-2">
+                                        <Users size={18} />
+                                        <span>{job.positions_filled ?? 0} of {job.available_positions} position{job.available_positions === 1 ? '' : 's'} filled</span>
+                                    </div>
+                                )}
+                                {displayJob.shift_schedule && (
                                     <div className="flex items-center gap-2">
                                         <Clock size={18} />
-                                        <span>{job.shift_schedule}</span>
+                                        <span>{displayJob.shift_schedule}</span>
                                     </div>
                                 )}
                                 {job.transport_provided && (
@@ -183,13 +209,37 @@ export default function JobDetailPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Locale switcher — only shown when this job actually has a
+                            translation on file (see the async CSV workflow in
+                            EmployerDashboard). Falls back per-field to the base
+                            content, so a partial translation never blanks a field. */}
+                        {availableLanguages.length > 0 && (
+                            <div className="flex-shrink-0">
+                                <label htmlFor="job-locale" className="sr-only">Language</label>
+                                <div className="flex items-center gap-1.5 border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
+                                    <Languages size={16} className="text-slate-500 flex-shrink-0" aria-hidden="true" />
+                                    <select
+                                        id="job-locale"
+                                        value={locale}
+                                        onChange={e => setLocale(e.target.value)}
+                                        className="bg-transparent text-sm text-slate-700 focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="en">English</option>
+                                        {availableLanguages.map(l => (
+                                            <option key={l.code} value={l.code}>{l.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Perks & Allowances */}
-                    {job.perks && (
+                    {displayJob.perks && (
                         <div className="flex items-start gap-2 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
                             <Gift size={18} className="mt-0.5 flex-shrink-0" />
-                            <span className="text-sm font-medium">{job.perks}</span>
+                            <span className="text-sm font-medium">{displayJob.perks}</span>
                         </div>
                     )}
 
@@ -258,7 +308,7 @@ export default function JobDetailPage() {
                 <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
                     <h2 className="text-2xl font-bold text-slate-900 mb-4">Job Description</h2>
                     <div className="prose prose-slate max-w-none">
-                        <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{job.description}</p>
+                        <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{displayJob.description}</p>
                     </div>
                 </div>
 
@@ -266,7 +316,7 @@ export default function JobDetailPage() {
                 <div className="bg-white rounded-xl shadow-lg p-8">
                     <h2 className="text-2xl font-bold text-slate-900 mb-4">Required Skills</h2>
                     <div className="flex flex-wrap gap-3">
-                        {(job.required_skills ?? []).map((skill, index) => (
+                        {(displayJob.required_skills ?? []).map((skill, index) => (
                             <span
                                 key={index}
                                 className="px-4 py-2 bg-emerald-100 text-emerald-800 rounded-full font-medium"

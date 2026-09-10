@@ -232,6 +232,9 @@ const rowToJob = (row: any): Job => ({
     transport_details: row.transport_details ?? undefined,
     accommodation_provided: row.accommodation_provided ?? false,
     accommodation_details: row.accommodation_details ?? undefined,
+    translations: row.translations ?? {},
+    available_positions: row.available_positions ?? undefined,
+    positions_filled: row.positions_filled ?? 0,
 });
 
 /**
@@ -409,6 +412,25 @@ export const updateApplicationStatus = async (
 ): Promise<void> => {
     const { error } = await supabase.from('applications').update({ status }).eq('id', applicationId);
     if (error) throw error;
+};
+
+/**
+ * Applicant counts per job, for a job LIST view (e.g. the employer's "My
+ * Job Postings") where fetching full applicant profiles for every job would
+ * be wasteful — getJobApplicants is for the per-job applicants screen.
+ * Withdrawn applications are excluded, matching getJobApplicants.
+ */
+export const getApplicantCounts = async (jobIds: string[]): Promise<Record<string, number>> => {
+    if (jobIds.length === 0) return {};
+    const { data, error } = await supabase
+        .from('applications')
+        .select('job_id')
+        .in('job_id', jobIds)
+        .neq('status', 'Withdrawn');
+    if (error) { console.error('Error fetching applicant counts:', error); return {}; }
+    const counts: Record<string, number> = {};
+    (data ?? []).forEach((row: any) => { counts[row.job_id] = (counts[row.job_id] ?? 0) + 1; });
+    return counts;
 };
 
 // ---------------------------------------------------------------------------
