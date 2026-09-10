@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SiteContentProvider } from './contexts/SiteContentContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { LocaleProvider } from './contexts/LocaleContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
@@ -72,6 +73,7 @@ function App() {
     return (
         <ErrorBoundary>
             <ThemeProvider>
+                <LocaleProvider>
                 <ToastProvider>
                 <AuthProvider>
                     <SiteContentProvider>
@@ -151,6 +153,7 @@ function App() {
                     </SiteContentProvider>
                 </AuthProvider>
                 </ToastProvider>
+                </LocaleProvider>
             </ThemeProvider>
         </ErrorBoundary>
     );

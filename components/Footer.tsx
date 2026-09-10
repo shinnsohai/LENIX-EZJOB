@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLocale } from '../contexts/LocaleContext';
 import { subscribeToNewsletter } from '../services/db';
 import BrandLogoCluster from './BrandLogoCluster';
 
@@ -10,6 +11,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const Footer: React.FC = () => {
     const { quickLinks, siteAssets } = useSiteContent();
     const { isDark } = useTheme();
+    const { t } = useLocale();
 
     const [newsletterEmail, setNewsletterEmail] = useState('');
     const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -20,7 +22,7 @@ const Footer: React.FC = () => {
 
         if (!EMAIL_REGEX.test(newsletterEmail)) {
             setNewsletterStatus('error');
-            setNewsletterMessage('Please enter a valid email address.');
+            setNewsletterMessage(t('footer.newsletterInvalidEmail'));
             return;
         }
 
@@ -29,12 +31,12 @@ const Footer: React.FC = () => {
         try {
             await subscribeToNewsletter(newsletterEmail);
             setNewsletterStatus('success');
-            setNewsletterMessage('You are subscribed! Watch your inbox for alerts.');
+            setNewsletterMessage(t('footer.newsletterSuccess'));
             setNewsletterEmail('');
         } catch (error) {
             console.error('[Footer] Newsletter subscription failed:', error);
             setNewsletterStatus('error');
-            setNewsletterMessage('Something went wrong. Please try again later.');
+            setNewsletterMessage(t('footer.newsletterError'));
         }
     };
 
@@ -48,21 +50,21 @@ const Footer: React.FC = () => {
                             <BrandLogoCluster ezjobLogoUrl={siteAssets.logoUrl} variant="footer" />
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
-                            A Clarity E&C Holding enterprise solution powered by LENIX technology. Precision recruitment and authenticated skill credentialing for the skilled trades.
+                            {t('footer.tagline')}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-medium bg-cyan-100 dark:bg-cyan-950/80 text-cyan-800 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/40">
                                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-                                AI Engine Active
+                                {t('footer.aiEngineActive')}
                             </span>
                         </div>
                     </div>
 
                     {/* Column 2: Quick Links */}
                     <div>
-                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">Platform Navigation</h3>
+                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">{t('footer.platformNavigation')}</h3>
                         <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
-                            <li><Link to="/jobs" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Search All Jobs</Link></li>
+                            <li><Link to="/jobs" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.searchAllJobs')}</Link></li>
                             {quickLinks.map(link => (
                                 <li key={link.id}>
                                     <Link to={link.url} className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{link.text}</Link>
@@ -73,18 +75,18 @@ const Footer: React.FC = () => {
 
                     {/* Column 3: Legal */}
                     <div>
-                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">Compliance & Trust</h3>
+                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">{t('footer.complianceTrust')}</h3>
                         <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
-                            <li><Link to="/privacy" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Privacy Policy</Link></li>
-                            <li><Link to="/terms" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Terms of Service</Link></li>
-                            <li><span className="text-slate-400 dark:text-slate-500 cursor-not-allowed">Enterprise-Grade Data Security</span></li>
+                            <li><Link to="/privacy" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.privacyPolicy')}</Link></li>
+                            <li><Link to="/terms" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.termsOfService')}</Link></li>
+                            <li><span className="text-slate-400 dark:text-slate-500 cursor-not-allowed">{t('footer.dataSecurity')}</span></li>
                         </ul>
                     </div>
 
                     {/* Column 4: Newsletter & Contact */}
                     <div>
-                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">Stay Ahead</h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">Get real-time alerts for high-priority skilled trade requisitions.</p>
+                        <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">{t('footer.stayAhead')}</h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">{t('footer.newsletterBlurb')}</p>
                         <form className="flex" onSubmit={handleNewsletterSubmit}>
                             <input
                                 type="email"
@@ -97,7 +99,7 @@ const Footer: React.FC = () => {
                                         setNewsletterMessage('');
                                     }
                                 }}
-                                placeholder="work@company.com"
+                                placeholder={t('footer.emailPlaceholder')}
                                 disabled={newsletterStatus === 'loading'}
                                 className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-l-lg focus:outline-none focus:border-cyan-500 disabled:opacity-60"
                             />
@@ -106,7 +108,7 @@ const Footer: React.FC = () => {
                                 disabled={newsletterStatus === 'loading'}
                                 className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2.5 rounded-r-lg font-mono text-xs font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {newsletterStatus === 'loading' ? '...' : 'Join'}
+                                {newsletterStatus === 'loading' ? '...' : t('footer.join')}
                             </button>
                         </form>
                         {newsletterMessage && (
@@ -118,10 +120,10 @@ const Footer: React.FC = () => {
                 </div>
 
                 <div className="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
-                    <p>&copy; {new Date().getFullYear()} EZJOB by LENIX. All rights reserved.</p>
+                    <p>&copy; {new Date().getFullYear()} EZJOB by LENIX. {t('footer.rightsReserved')}</p>
                     <div className="flex items-center gap-4">
-                        <span className="text-slate-500">Singapore • Malaysia • Regional Hubs</span>
-                        <Link to="/admin/login" className="text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 font-mono transition-colors">Console</Link>
+                        <span className="text-slate-500">{t('footer.regions')}</span>
+                        <Link to="/admin/login" className="text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 font-mono transition-colors">{t('footer.console')}</Link>
                     </div>
                 </div>
             </div>
