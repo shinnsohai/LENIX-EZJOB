@@ -7,14 +7,20 @@ import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
 import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home, Users } from 'lucide-react';
 import { formatSalaryRange } from '../data/currencies';
+import { useLocale } from '../contexts/LocaleContext';
+import type { UIStrings } from '../locales';
 
-const TRADE_CATEGORIES = [
-    'All Roles',
-    'Engineering',
-    'Heavy Machinery',
-    'Electrical',
-    'Welding & Fabrication',
-    'Safety Oversight'
+// Category filtering matches against the job's English title/description/
+// skills regardless of display locale — job content itself isn't
+// translated inline (see jobs.translations), so filtering stays anchored
+// to the base English category words while only the visible label switches.
+const TRADE_CATEGORIES: { key: keyof UIStrings; match: string }[] = [
+    { key: 'jobSearch.categoryAll', match: 'All Roles' },
+    { key: 'jobSearch.categoryEngineering', match: 'Engineering' },
+    { key: 'jobSearch.categoryHeavyMachinery', match: 'Heavy Machinery' },
+    { key: 'jobSearch.categoryElectrical', match: 'Electrical' },
+    { key: 'jobSearch.categoryWelding', match: 'Welding & Fabrication' },
+    { key: 'jobSearch.categorySafety', match: 'Safety Oversight' },
 ];
 
 const JobCard: React.FC<{
@@ -26,11 +32,12 @@ const JobCard: React.FC<{
     onViewCompany: (employerId: string) => void;
     index: number;
 }> = ({ job, onApply, isApplying, hasApplied, onViewJob, onViewCompany, index }) => {
+    const { t } = useLocale();
     // Dynamic border color styling based on index or urgency
-    const accentBorder = index % 3 === 0 
-        ? 'border-l-orange-500' 
-        : index % 3 === 1 
-            ? 'border-l-cyan-500' 
+    const accentBorder = index % 3 === 0
+        ? 'border-l-orange-500'
+        : index % 3 === 1
+            ? 'border-l-cyan-500'
             : 'border-l-fuchsia-500';
 
     const badgeStyle = index % 3 === 0
@@ -39,7 +46,7 @@ const JobCard: React.FC<{
             ? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30'
             : 'bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/30';
 
-    const badgeLabel = index % 3 === 0 ? 'Immediate Start' : index % 3 === 1 ? 'Verified Req' : 'Hot Role';
+    const badgeLabel = index % 3 === 0 ? t('jobSearch.badgeImmediateStart') : index % 3 === 1 ? t('jobSearch.badgeVerifiedReq') : t('jobSearch.badgeHotRole');
 
     return (
         <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 border-l-4 ${accentBorder} shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden ${hasApplied ? 'opacity-90 ring-1 ring-emerald-400' : ''}`}>
@@ -78,7 +85,7 @@ const JobCard: React.FC<{
                     <div className="flex items-center gap-1.5">
                         <DollarSign size={14} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} / yr
+                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} {t('common.perYear')}
                         </span>
                     </div>
                     {job.shift_schedule && (
@@ -91,12 +98,12 @@ const JobCard: React.FC<{
                         <div className="flex items-center gap-3 flex-wrap">
                             {job.transport_provided && (
                                 <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                                    <Bus size={14} className="text-cyan-600 dark:text-cyan-400" /> Transport
+                                    <Bus size={14} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.transport')}
                                 </span>
                             )}
                             {job.accommodation_provided && (
                                 <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                                    <Home size={14} className="text-cyan-600 dark:text-cyan-400" /> Housing
+                                    <Home size={14} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.housing')}
                                 </span>
                             )}
                         </div>
@@ -104,13 +111,13 @@ const JobCard: React.FC<{
                     {job.available_positions !== undefined && (
                         <div className="flex items-center gap-1.5">
                             <Users size={14} className="text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
-                            <span>{Math.max(0, job.available_positions - (job.positions_filled ?? 0))} of {job.available_positions} open</span>
+                            <span>{t('jobSearch.positionsOpen', { filled: Math.max(0, job.available_positions - (job.positions_filled ?? 0)), total: job.available_positions })}</span>
                         </div>
                     )}
                     {job.createdAt && (
                         <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[11px]">
                             <Calendar size={13} />
-                            <span>Posted {new Date(job.createdAt).toLocaleDateString()}</span>
+                            <span>{t('jobSearch.posted', { date: new Date(job.createdAt).toLocaleDateString() })}</span>
                         </div>
                     )}
                 </div>
@@ -139,7 +146,7 @@ const JobCard: React.FC<{
                     onClick={() => onViewJob(job.id)}
                     className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
                 >
-                    View Details &rarr;
+                    {t('jobSearch.viewDetails')}
                 </button>
                 
                 <button
@@ -159,12 +166,12 @@ const JobCard: React.FC<{
                     {hasApplied ? (
                         <>
                             <CheckCircle2 size={14} />
-                            Applied
+                            {t('jobSearch.applied')}
                         </>
                     ) : isApplying ? (
-                        'Submitting...'
+                        t('jobSearch.submitting')
                     ) : (
-                        'Apply Now'
+                        t('jobSearch.applyNow')
                     )}
                 </button>
             </div>
@@ -174,6 +181,7 @@ const JobCard: React.FC<{
 
 const JobSearchPage: React.FC = () => {
     const { user } = useAuth();
+    const { t } = useLocale();
     const navigate = useNavigate();
     const [jobs, setJobs] = useState<Job[]>([]);
     const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
@@ -251,13 +259,13 @@ const JobSearchPage: React.FC = () => {
 
     const handleApply = async (job: Job) => {
         if (!user) {
-            setNotification({ message: "Please log in or register to submit an application.", type: 'error' });
+            setNotification({ message: t('jobSearch.notifyLoginRequired'), type: 'error' });
             setTimeout(() => setNotification(null), 3500);
             return;
         }
 
         if (user.role !== UserRole.WORKER) {
-            setNotification({ message: "Employer accounts cannot apply for jobs.", type: 'error' });
+            setNotification({ message: t('jobSearch.notifyEmployerCannotApply'), type: 'error' });
             setTimeout(() => setNotification(null), 3500);
             return;
         }
@@ -266,11 +274,11 @@ const JobSearchPage: React.FC = () => {
 
         try {
             await createApplication(job, user.id);
-            setNotification({ message: "Application submitted successfully with verified Skill Passport!", type: 'success' });
+            setNotification({ message: t('jobSearch.notifySuccess'), type: 'success' });
             setAppliedJobIds(prev => new Set(prev).add(job.id));
         } catch (error: any) {
             console.error("Apply error:", error);
-            setNotification({ message: error.message || "Failed to apply. Please try again.", type: 'error' });
+            setNotification({ message: error.message || t('jobSearch.notifyFailure'), type: 'error' });
         } finally {
             setApplyingId(null);
             setTimeout(() => setNotification(null), 3500);
@@ -304,13 +312,13 @@ const JobSearchPage: React.FC = () => {
                     <div className="relative z-10 max-w-3xl">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 border border-cyan-500/30 rounded-full text-xs font-mono text-cyan-400 uppercase tracking-widest mb-3">
                             <Sparkles size={13} />
-                            AI-Powered Requisition Match
+                            {t('jobSearch.badge')}
                         </div>
                         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-                            Find High-Velocity Skilled Trade Roles
+                            {t('jobSearch.heading')}
                         </h1>
                         <p className="text-slate-300 text-sm mt-2">
-                            Explore verified positions across engineering, construction, electrical, and heavy operations.
+                            {t('jobSearch.subheading')}
                         </p>
                     </div>
 
@@ -322,7 +330,7 @@ const JobSearchPage: React.FC = () => {
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="Search by trade title, company, location, or skill..."
+                                placeholder={t('jobSearch.searchPlaceholder')}
                                 className="w-full pl-11 pr-4 py-3 bg-slate-900 border border-slate-700 text-white rounded-full focus:outline-none focus:border-cyan-400 font-mono text-sm placeholder:text-slate-500"
                             />
                         </div>
@@ -332,7 +340,7 @@ const JobSearchPage: React.FC = () => {
                             className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-slate-600 text-white rounded-full font-mono text-xs uppercase tracking-wider transition-colors whitespace-nowrap cursor-pointer"
                         >
                             <ArrowUpDown size={15} className="text-cyan-400" />
-                            <span>{sortOrder === 'newest' ? 'Newest First' : 'Oldest First'}</span>
+                            <span>{sortOrder === 'newest' ? t('jobSearch.newestFirst') : t('jobSearch.oldestFirst')}</span>
                         </button>
                     </div>
 
@@ -340,15 +348,15 @@ const JobSearchPage: React.FC = () => {
                     <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 relative z-10 scrollbar-none">
                         {TRADE_CATEGORIES.map((cat) => (
                             <button
-                                key={cat}
-                                onClick={() => setSelectedCategory(cat)}
+                                key={cat.match}
+                                onClick={() => setSelectedCategory(cat.match)}
                                 className={`px-4 py-1.5 rounded-full font-mono text-xs uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                                    selectedCategory === cat
+                                    selectedCategory === cat.match
                                         ? 'bg-cyan-500 text-slate-950 font-bold shadow-md'
                                         : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-850 border border-slate-800'
                                 }`}
                             >
-                                {cat}
+                                {t(cat.key)}
                             </button>
                         ))}
                     </div>
@@ -357,14 +365,14 @@ const JobSearchPage: React.FC = () => {
                 {/* Search Meta Info */}
                 <div className="flex items-center justify-between mb-6 px-1 text-xs font-mono text-slate-500 dark:text-slate-400">
                     <span>
-                        Showing <strong className="text-slate-900 dark:text-white font-bold">{filteredJobs.length}</strong> active requisitions
+                        {t('jobSearch.showingCount', { count: filteredJobs.length })}
                     </span>
                     {searchTerm && (
                         <button 
                             onClick={() => setSearchTerm('')} 
                             className="text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
                         >
-                            Clear Search
+                            {t('jobSearch.clearSearch')}
                         </button>
                     )}
                 </div>
@@ -373,7 +381,7 @@ const JobSearchPage: React.FC = () => {
                 {isLoading ? (
                     <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <Spinner size="lg" />
-                        <p className="mt-4 font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-widest">Querying LENIX Match Engine...</p>
+                        <p className="mt-4 font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-widest">{t('jobSearch.loading')}</p>
                     </div>
                 ) : filteredJobs.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -393,9 +401,9 @@ const JobSearchPage: React.FC = () => {
                 ) : (
                     <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
                         <span className="material-symbols-outlined text-4xl text-slate-400 mb-2">work_off</span>
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">No matching requisitions found</h3>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('jobSearch.noResultsTitle')}</h3>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md mx-auto">
-                            Try adjusting your search terms or select "All Roles" to view all available skilled trade positions.
+                            {t('jobSearch.noResultsBody')}
                         </p>
                     </div>
                 )}

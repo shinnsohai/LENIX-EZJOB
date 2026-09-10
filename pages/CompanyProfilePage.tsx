@@ -6,9 +6,11 @@ import Spinner from '../components/Spinner';
 import { Building2, MapPin, Globe, Phone, Users, Calendar, ArrowLeft, Briefcase, DollarSign } from 'lucide-react';
 import type { EmployerProfile, Job } from '../types';
 import { formatSalaryRange } from '../data/currencies';
+import { useLocale } from '../contexts/LocaleContext';
 
 export default function CompanyProfilePage() {
     const { id } = useParams<{ id: string }>();
+    const { t } = useLocale();
     const navigate = useNavigate();
     const [profile, setProfile] = useState<EmployerProfile | null>(null);
     const [jobs, setJobs] = useState<Job[]>([]);
@@ -201,7 +203,7 @@ export default function CompanyProfilePage() {
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <DollarSign size={14} />
-                                                    {formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr
+                                                    {formatSalaryRange(job.salary_min, job.salary_max, job.country)} {t('common.perYear')}
                                                 </span>
                                             </div>
                                         </div>

@@ -5,8 +5,9 @@ interface LocaleContextType {
     locale: string;
     setLocale: (code: string) => void;
     /** Looks up `key` in the active locale, falling back to English so a
-     * missing/unreviewed string never renders blank. */
-    t: (key: keyof UIStrings) => string;
+     * missing/unreviewed string never renders blank. `vars` fills in
+     * `{placeholder}` tokens, e.g. t('jobSearch.showingCount', { count: 12 }). */
+    t: (key: keyof UIStrings, vars?: Record<string, string | number>) => string;
 }
 
 const LocaleContext = createContext<LocaleContextType | undefined>(undefined);
@@ -39,7 +40,11 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
     const englishStrings = SUPPORTED_LOCALES[0].strings;
 
-    const t = (key: keyof UIStrings): string => strings[key] ?? englishStrings[key] ?? String(key);
+    const t = (key: keyof UIStrings, vars?: Record<string, string | number>): string => {
+        const template = strings[key] ?? englishStrings[key] ?? String(key);
+        if (!vars) return template;
+        return template.replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
+    };
 
     return (
         <LocaleContext.Provider value={{ locale, setLocale, t }}>

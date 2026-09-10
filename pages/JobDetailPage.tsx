@@ -10,12 +10,14 @@ import { UserRole } from '../types';
 import type { Job } from '../types';
 import { formatSalaryRange } from '../data/currencies';
 import { TRANSLATION_LANGUAGES, languageLabel } from '../data/languages';
+import { useLocale } from '../contexts/LocaleContext';
 
 export default function JobDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { user } = useAuth();
     const { showToast } = useToast();
+    const { t } = useLocale();
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
@@ -66,7 +68,7 @@ export default function JobDetailPage() {
         }
 
         if (user.role !== UserRole.WORKER) {
-            showToast("Employer accounts cannot apply for jobs.", 'error');
+            showToast(t('jobSearch.notifyEmployerCannotApply'), 'error');
             return;
         }
 
@@ -76,7 +78,7 @@ export default function JobDetailPage() {
             setHasApplied(true);
         } catch (error: any) {
             console.error("Error applying to job:", error);
-            showToast(error.message || "Failed to submit application. Please try again.", 'error');
+            showToast(error.message || t('jobDetail.applyFailed'), 'error');
         } finally {
             setApplying(false);
         }
@@ -100,14 +102,14 @@ export default function JobDetailPage() {
     // job — an empty switcher option that falls straight back to English
     // isn't a real choice.
     const availableLanguages = TRANSLATION_LANGUAGES.filter(l => job?.translations?.[l.code]);
-    const t = locale !== 'en' ? job?.translations?.[locale] : undefined;
+    const jobT = locale !== 'en' ? job?.translations?.[locale] : undefined;
     const displayJob = job ? {
-        title: t?.title || job.title,
-        description: t?.description || job.description,
-        required_skills: t?.required_skills?.length ? t.required_skills : job.required_skills,
-        shift_schedule: t?.shift_schedule || job.shift_schedule,
-        perks: t?.perks || job.perks,
-        qualifying_questions: t?.qualifying_questions?.length ? t.qualifying_questions : job.qualifying_questions,
+        title: jobT?.title || job.title,
+        description: jobT?.description || job.description,
+        required_skills: jobT?.required_skills?.length ? jobT.required_skills : job.required_skills,
+        shift_schedule: jobT?.shift_schedule || job.shift_schedule,
+        perks: jobT?.perks || job.perks,
+        qualifying_questions: jobT?.qualifying_questions?.length ? jobT.qualifying_questions : job.qualifying_questions,
     } : null;
 
     const questions = displayJob?.qualifying_questions ?? [];
@@ -131,12 +133,12 @@ export default function JobDetailPage() {
         return (
             <div className="container mx-auto px-4 py-8">
                 <div className="text-center">
-                    <h2 className="text-2xl font-bold text-slate-800">Job Not Found</h2>
+                    <h2 className="text-2xl font-bold text-slate-800">{t('jobDetail.jobNotFound')}</h2>
                     <button
                         onClick={() => navigate('/jobs')}
                         className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
                     >
-                        Back to Jobs
+                        {t('jobDetail.backToJobs')}
                     </button>
                 </div>
             </div>
@@ -151,7 +153,7 @@ export default function JobDetailPage() {
                 className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"
             >
                 <ArrowLeft size={20} />
-                Back
+                {t('jobDetail.back')}
             </button>
 
             <div className="max-w-4xl mx-auto">
@@ -175,7 +177,7 @@ export default function JobDetailPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <DollarSign size={18} />
-                                    <span>{formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr</span>
+                                    <span>{formatSalaryRange(job.salary_min, job.salary_max, job.country)} {t('common.perYear')}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Briefcase size={18} />
@@ -186,7 +188,7 @@ export default function JobDetailPage() {
                                 {job.available_positions !== undefined && (
                                     <div className="flex items-center gap-2">
                                         <Users size={18} />
-                                        <span>{job.positions_filled ?? 0} of {job.available_positions} position{job.available_positions === 1 ? '' : 's'} filled</span>
+                                        <span>{t('jobDetail.positionsFilled', { filled: job.positions_filled ?? 0, total: job.available_positions })}</span>
                                     </div>
                                 )}
                                 {displayJob.shift_schedule && (
@@ -198,13 +200,13 @@ export default function JobDetailPage() {
                                 {job.transport_provided && (
                                     <div className="flex items-center gap-2">
                                         <Bus size={18} />
-                                        <span>{job.transport_details || 'Transport provided'}</span>
+                                        <span>{job.transport_details || t('jobDetail.transportProvided')}</span>
                                     </div>
                                 )}
                                 {job.accommodation_provided && (
                                     <div className="flex items-center gap-2">
                                         <Home size={18} />
-                                        <span>{job.accommodation_details || 'Accommodation provided'}</span>
+                                        <span>{job.accommodation_details || t('jobDetail.accommodationProvided')}</span>
                                     </div>
                                 )}
                             </div>
@@ -216,7 +218,7 @@ export default function JobDetailPage() {
                             content, so a partial translation never blanks a field. */}
                         {availableLanguages.length > 0 && (
                             <div className="flex-shrink-0">
-                                <label htmlFor="job-locale" className="sr-only">Language</label>
+                                <label htmlFor="job-locale" className="sr-only">{t('header.language')}</label>
                                 <div className="flex items-center gap-1.5 border border-slate-300 rounded-lg px-2.5 py-1.5 bg-slate-50">
                                     <Languages size={16} className="text-slate-500 flex-shrink-0" aria-hidden="true" />
                                     <select
@@ -246,7 +248,7 @@ export default function JobDetailPage() {
                     {/* Qualifying Questions — confirm-to-apply checklist, replaces a cover letter */}
                     {questions.length > 0 && (
                         <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                            <h3 className="text-sm font-bold text-slate-900 mb-2">Before you apply, confirm:</h3>
+                            <h3 className="text-sm font-bold text-slate-900 mb-2">{t('jobDetail.beforeYouApply')}</h3>
                             <div className="space-y-2">
                                 {questions.map((q, i) => (
                                     <label key={i} className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
@@ -268,7 +270,7 @@ export default function JobDetailPage() {
                         <button
                             onClick={handleApply}
                             disabled={applying || hasApplied || !allQuestionsConfirmed}
-                            title={!allQuestionsConfirmed ? 'Confirm the questions above to apply' : undefined}
+                            title={!allQuestionsConfirmed ? t('jobDetail.confirmToApply') : undefined}
                             className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied || !allQuestionsConfirmed
                                     ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                                     : 'bg-emerald-600 text-white hover:bg-emerald-700'
@@ -277,12 +279,12 @@ export default function JobDetailPage() {
                             {hasApplied ? (
                                 <>
                                     <CheckCircle size={20} className="inline mr-2" />
-                                    Already Applied
+                                    {t('jobDetail.alreadyApplied')}
                                 </>
                             ) : applying ? (
-                                'Submitting...'
+                                t('jobSearch.submitting')
                             ) : (
-                                'Apply for this Position'
+                                t('jobDetail.applyForPosition')
                             )}
                         </button>
                         {whatsappHref && (
@@ -298,7 +300,7 @@ export default function JobDetailPage() {
                                     }`}
                             >
                                 <MessageCircle size={20} />
-                                WhatsApp to Apply
+                                {t('jobDetail.whatsappToApply')}
                             </a>
                         )}
                     </div>
@@ -306,7 +308,7 @@ export default function JobDetailPage() {
 
                 {/* Job Description */}
                 <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-                    <h2 className="text-2xl font-bold text-slate-900 mb-4">Job Description</h2>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-4">{t('jobDetail.jobDescription')}</h2>
                     <div className="prose prose-slate max-w-none">
                         <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{displayJob.description}</p>
                     </div>
@@ -314,7 +316,7 @@ export default function JobDetailPage() {
 
                 {/* Required Skills */}
                 <div className="bg-white rounded-xl shadow-lg p-8">
-                    <h2 className="text-2xl font-bold text-slate-900 mb-4">Required Skills</h2>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-4">{t('jobDetail.requiredSkills')}</h2>
                     <div className="flex flex-wrap gap-3">
                         {(displayJob.required_skills ?? []).map((skill, index) => (
                             <span
@@ -332,7 +334,7 @@ export default function JobDetailPage() {
                     <button
                         onClick={handleApply}
                         disabled={applying || hasApplied || !allQuestionsConfirmed}
-                        title={!allQuestionsConfirmed ? 'Confirm the questions above to apply' : undefined}
+                        title={!allQuestionsConfirmed ? t('jobDetail.confirmToApply') : undefined}
                         className={`flex-1 py-3 px-6 rounded-lg font-bold text-lg transition-colors ${hasApplied || !allQuestionsConfirmed
                                 ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                                 : 'bg-emerald-600 text-white hover:bg-emerald-700'
@@ -341,12 +343,12 @@ export default function JobDetailPage() {
                         {hasApplied ? (
                             <>
                                 <CheckCircle size={20} className="inline mr-2" />
-                                Already Applied
+                                {t('jobDetail.alreadyApplied')}
                             </>
                         ) : applying ? (
-                            'Submitting...'
+                            t('jobSearch.submitting')
                         ) : (
-                            'Apply for this Position'
+                            t('jobDetail.applyForPosition')
                         )}
                     </button>
                     {whatsappHref && (
@@ -362,7 +364,7 @@ export default function JobDetailPage() {
                                 }`}
                         >
                             <MessageCircle size={20} />
-                            WhatsApp to Apply
+                            {t('jobDetail.whatsappToApply')}
                         </a>
                     )}
                 </div>
