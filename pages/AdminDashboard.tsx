@@ -244,7 +244,7 @@ const FrontpageContentManager: React.FC = () => {
                                 <textarea value={item.quote} onChange={e => handleListChange('testimonials', index, 'quote', e.target.value)} className="w-full p-2 border rounded" rows={2} placeholder="Quote"></textarea>
                                 <input type="text" value={item.author} onChange={e => handleListChange('testimonials', index, 'author', e.target.value)} className="w-full p-2 border rounded" placeholder="Author" />
                             </div>
-                            <button onClick={() => removeListItem('testimonials', item.id)} className="text-red-500 font-bold p-2">&times;</button>
+                            <button onClick={() => removeListItem('testimonials', item.id)} className="text-red-500 font-bold p-2" aria-label="Remove testimonial">&times;</button>
                         </div>
                     ))}
                 </div>
@@ -263,7 +263,7 @@ const FrontpageContentManager: React.FC = () => {
                                 <input type="text" value={item.q} onChange={e => handleListChange('faqs', index, 'q', e.target.value)} className="w-full p-2 border rounded" placeholder="Question" />
                                 <textarea value={item.a} onChange={e => handleListChange('faqs', index, 'a', e.target.value)} className="w-full p-2 border rounded" rows={2} placeholder="Answer"></textarea>
                             </div>
-                            <button onClick={() => removeListItem('faqs', item.id)} className="text-red-500 font-bold p-2">&times;</button>
+                            <button onClick={() => removeListItem('faqs', item.id)} className="text-red-500 font-bold p-2" aria-label="Remove FAQ">&times;</button>
                         </div>
                     ))}
                 </div>
@@ -461,7 +461,7 @@ const QuickLinksAndPagesManager: React.FC = () => {
                                 <div key={link.id} className="flex items-center gap-4 p-2 border rounded-md">
                                     <input type="text" placeholder="Link Text" value={link.text} onChange={e => setTempLinks(tempLinks.map(l => l.id === link.id ? { ...l, text: e.target.value } : l))} className="flex-1 px-3 py-2 border border-gray-300 rounded-md" />
                                     <input type="text" placeholder="URL (e.g., /about)" value={link.url} onChange={e => setTempLinks(tempLinks.map(l => l.id === link.id ? { ...l, url: e.target.value } : l))} className="flex-1 px-3 py-2 border border-gray-300 rounded-md" />
-                                    <button onClick={() => setTempLinks(tempLinks.filter(l => l.id !== link.id))} className="text-red-500 hover:text-red-700 font-bold p-2">&times;</button>
+                                    <button onClick={() => setTempLinks(tempLinks.filter(l => l.id !== link.id))} className="text-red-500 hover:text-red-700 font-bold p-2" aria-label="Remove link">&times;</button>
                                 </div>
                             ))}
                         </div>
@@ -747,10 +747,10 @@ const AdminRecordModal: React.FC<AdminRecordModalProps> = ({ isOpen, mode, userT
 
     return (
         <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-slate-200">
+            <div role="dialog" aria-modal="true" aria-labelledby="admin-record-modal-title" className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-slate-200">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                    <h2 className="text-xl font-extrabold text-slate-900">{titleText}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                    <h2 id="admin-record-modal-title" className="text-xl font-extrabold text-slate-900">{titleText}</h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none p-1" aria-label="Close dialog">&times;</button>
                 </div>
                 <form onSubmit={handleSubmit}>
                     <div className="space-y-6">

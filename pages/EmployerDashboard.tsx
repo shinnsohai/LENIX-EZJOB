@@ -1663,14 +1663,15 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
             {/* CSV Import Modal */}
             {showCsvModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <div role="dialog" aria-modal="true" aria-labelledby="csv-import-modal-title" className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-2xl font-bold text-gray-900">Import Jobs from CSV</h2>
+                                <h2 id="csv-import-modal-title" className="text-2xl font-bold text-gray-900">Import Jobs from CSV</h2>
                                 <button
                                     onClick={() => { setShowCsvModal(false); setCsvFile(null); setCsvImportStatus({ success: 0, failed: 0, errors: [] }); }}
-                                    className="text-gray-400 hover:text-gray-600">
-                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    aria-label="Close dialog"
+                                    className="text-gray-400 hover:text-gray-600 p-1">
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </button>
