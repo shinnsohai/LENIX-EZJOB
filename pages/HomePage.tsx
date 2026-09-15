@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
+import { useLocale } from '../contexts/LocaleContext';
 import { UserRole } from '../types';
 import { generateJobWithAI } from '../services/geminiService';
 import {
@@ -247,6 +248,7 @@ const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
 
 const HeroSection = () => {
     const navigate = useNavigate();
+    const { t } = useLocale();
     const { homepageContent } = useSiteContent();
     const { ref: statsRef, inView: statsInView } = useInView<HTMLDivElement>();
     // Two-plane depth: the ambient wallpaper is the back plane (moves against
@@ -281,19 +283,18 @@ const HeroSection = () => {
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-cyan-500/30 rounded-full w-fit shadow-sm">
                         <Zap size={16} className="text-cyan-600 dark:text-cyan-400" />
                         <span className="font-mono text-xs uppercase tracking-widest text-cyan-700 dark:text-cyan-300 font-semibold">
-                            Accelerated Hiring Engine
+                            {t('homepage.badge')}
                         </span>
                     </div>
 
                     {/* Headline: 2 lines max, single locked accent for the emphasis word */}
                     <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-slate-900 dark:text-white max-w-2xl">
-                        Engineering the <span className="text-gradient-cyan-blue">future of work.</span>
+                        {t('homepage.heroHeadlinePrefix')} <span className="text-gradient-cyan-blue">{t('homepage.heroHeadlineAccent')}</span>
                     </h1>
 
                     {/* Subheadline */}
                     <p className="text-lg text-slate-600 dark:text-slate-300 max-w-xl font-normal leading-relaxed">
-                        {homepageContent.hero.subheadline ||
-                            'EZJOB by LENIX matches elite industrial talent with leading technical projects in real-time. Experience precision recruitment powered by advanced AI.'}
+                        {homepageContent.hero.subheadline || t('homepage.heroSubheadlineFallback')}
                     </p>
 
                     {/* CTAs: one primary (browse), one secondary (post a role) */}
@@ -302,7 +303,7 @@ const HeroSection = () => {
                             onClick={() => navigate('/jobs')}
                             className="bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider px-8 py-4 rounded-full font-bold shadow-md shadow-cyan-500/20 hover:shadow-lg hover:shadow-cyan-500/30 transition-all flex items-center gap-2 group cursor-pointer active:scale-[0.98]"
                         >
-                            Find Opportunities
+                            {t('homepage.findOpportunities')}
                             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                         </button>
                         <button
@@ -310,7 +311,7 @@ const HeroSection = () => {
                             className="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 hover:border-cyan-400/60 font-mono text-xs uppercase tracking-wider px-8 py-4 rounded-full transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
                         >
                             <PlusCircle size={18} className="text-cyan-600 dark:text-cyan-400" />
-                            Post a Role
+                            {t('homepage.postARole')}
                         </button>
                     </div>
 
@@ -324,7 +325,7 @@ const HeroSection = () => {
                                 className="block text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums"
                             />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                Active Projects
+                                {t('homepage.statActiveProjects')}
                             </span>
                         </div>
                         <div>
@@ -335,7 +336,7 @@ const HeroSection = () => {
                                 className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
                             />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                Match Rate
+                                {t('homepage.statMatchRate')}
                             </span>
                         </div>
                         <div>
@@ -346,7 +347,7 @@ const HeroSection = () => {
                                 className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
                             />
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                Avg. Placement
+                                {t('homepage.statAvgPlacement')}
                             </span>
                         </div>
                     </div>
@@ -378,27 +379,28 @@ const HeroSection = () => {
 
 const HighVelocityRolesSection = () => {
     const navigate = useNavigate();
+    const { t } = useLocale();
     const { ref, inView } = useInView<HTMLDivElement>();
 
     const sampleRoles = [
         {
-            title: "Lead Structural Architect",
-            desc: "Oversee structural integrity for major commercial tower projects. Advanced CAD and site oversight.",
-            category: "Immediate Start",
+            title: t('homepage.role1Title'),
+            desc: t('homepage.role1Desc'),
+            category: t('jobSearch.badgeImmediateStart'),
             rate: "$95 - $120 / hr",
             location: "Singapore CBD",
         },
         {
-            title: "Industrial Pipefitter & TIG Welder",
-            desc: "High-pressure stainless steel pipe fabrication, ISO compliant blueprint reading and hydro testing.",
-            category: "Hot Role",
+            title: t('homepage.role2Title'),
+            desc: t('homepage.role2Desc'),
+            category: t('jobSearch.badgeHotRole'),
             rate: "$65 - $80 / hr",
             location: "Jurong Island, SG",
         },
         {
-            title: "High-Voltage Substation Technician",
-            desc: "Installation, preventative maintenance, and troubleshooting of 66kV industrial switchgear systems.",
-            category: "Verified Talent",
+            title: t('homepage.role3Title'),
+            desc: t('homepage.role3Desc'),
+            category: t('homepage.badgeVerifiedTalent'),
             rate: "$55 - $75 / hr",
             location: "Johor Bahru / SG",
         },
@@ -415,16 +417,16 @@ const HighVelocityRolesSection = () => {
                 }`}
             >
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">High-Velocity Roles</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.rolesHeading')}</h2>
                     <p className="text-slate-600 dark:text-slate-300 text-sm mt-1 max-w-md">
-                        Real-time matching for industrial, engineering, and certified technical specialists.
+                        {t('homepage.rolesSubheading')}
                     </p>
                 </div>
                 <button
                     onClick={() => navigate('/jobs')}
                     className="inline-flex items-center gap-2 text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 font-mono text-xs uppercase font-bold transition-colors self-start md:self-auto cursor-pointer active:scale-[0.98]"
                 >
-                    View All Active Roles
+                    {t('homepage.viewAllRoles')}
                     <ArrowRight size={16} />
                 </button>
             </div>
@@ -453,7 +455,7 @@ const HighVelocityRolesSection = () => {
                                 onClick={() => navigate('/jobs')}
                                 className="bg-slate-900 dark:bg-cyan-500 hover:bg-cyan-600 dark:hover:bg-cyan-400 text-white dark:text-slate-950 font-mono text-xs uppercase px-5 py-2.5 rounded-full font-semibold transition-colors cursor-pointer active:scale-[0.98]"
                             >
-                                Apply Now
+                                {t('jobSearch.applyNow')}
                             </button>
                         </div>
                     </div>
@@ -481,7 +483,7 @@ const HighVelocityRolesSection = () => {
                                         onClick={() => navigate('/jobs')}
                                         className="text-cyan-700 dark:text-cyan-400 hover:text-cyan-900 dark:hover:text-cyan-300 font-mono text-xs uppercase font-bold transition-colors cursor-pointer active:scale-[0.98]"
                                     >
-                                        Apply Now
+                                        {t('jobSearch.applyNow')}
                                     </button>
                                 </div>
                             </div>
@@ -494,22 +496,23 @@ const HighVelocityRolesSection = () => {
 };
 
 const FeaturesSection = () => {
+    const { t } = useLocale();
     const features = [
-        { icon: Bot, name: 'AI Job Studio', desc: 'Generate complete, optimized job specifications in seconds.' },
-        { icon: ShieldCheck, name: 'Verified Passport', desc: 'Digital credentialing & authenticated certification records.' },
-        { icon: Zap, name: 'High-Speed Match', desc: 'Ranked candidate recommendations based on actual trade skills.' },
-        { icon: Shield, name: 'Structural Integrity', desc: 'Enterprise data compliance and fraud-resistant skill scoring.' },
-        { icon: Globe, name: 'Cross-Border Mobility', desc: 'Regional deployment ready across SG, MY, and APAC hubs.' },
-        { icon: FileDown, name: 'PDF Skill Export', desc: 'Download standardized, print-ready trade portfolios.' },
+        { icon: Bot, name: t('homepage.featureAiStudioName'), desc: t('homepage.featureAiStudioDesc') },
+        { icon: ShieldCheck, name: t('homepage.featurePassportName'), desc: t('homepage.featurePassportDesc') },
+        { icon: Zap, name: t('homepage.featureMatchName'), desc: t('homepage.featureMatchDesc') },
+        { icon: Shield, name: t('homepage.featureIntegrityName'), desc: t('homepage.featureIntegrityDesc') },
+        { icon: Globe, name: t('homepage.featureMobilityName'), desc: t('homepage.featureMobilityDesc') },
+        { icon: FileDown, name: t('homepage.featureExportName'), desc: t('homepage.featureExportDesc') },
     ];
 
     return (
         <section className="py-20 bg-slate-50 dark:bg-slate-900/60 border-y border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
                 <Reveal className="max-w-2xl mb-12">
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Built for Industrial Precision</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.featuresHeading')}</h2>
                     <p className="text-slate-600 dark:text-slate-300 text-sm mt-2">
-                        Every feature in EZJOB by LENIX is architected to eliminate hiring friction in skilled trades.
+                        {t('homepage.featuresSubheading')}
                     </p>
                 </Reveal>
 
@@ -558,6 +561,7 @@ const FeaturesSection = () => {
 };
 
 const AiInActionSection = () => {
+    const { t } = useLocale();
     const [jobTitle, setJobTitle] = useState('Heavy Machinery Operator');
     const [generatedJD, setGeneratedJD] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
@@ -579,7 +583,7 @@ const AiInActionSection = () => {
         try {
             const { description, required_skills } = await generateJobWithAI(jobTitle, 'a leading EZJOB employer');
             if (!description || description === 'Could not generate description.') {
-                setGenError('AI generation is temporarily unavailable. Please try again shortly.');
+                setGenError(t('homepage.aiDemoError'));
                 setGeneratedJD('');
                 return;
             }
@@ -589,7 +593,7 @@ const AiInActionSection = () => {
             setGeneratedJD(`REQUISITION: ${jobTitle}\n\n${description}${skillsBlock}`);
         } catch (error) {
             console.error('Error generating demo job description:', error);
-            setGenError('AI generation is temporarily unavailable. Please try again shortly.');
+            setGenError(t('homepage.aiDemoError'));
             setGeneratedJD('');
         } finally {
             setIsGenerating(false);
@@ -618,9 +622,9 @@ const AiInActionSection = () => {
                 />
 
                 <div className="max-w-3xl mx-auto text-center mb-8 relative z-10">
-                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">Interactive Demo</span>
-                    <h2 className="text-3xl font-bold tracking-tight text-white mt-1">EZJOB AI Job Studio in Action</h2>
-                    <p className="text-slate-300 text-sm mt-2">Enter a skilled trade title to test the LENIX AI requisition generator.</p>
+                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-400 font-bold">{t('homepage.aiDemoBadge')}</span>
+                    <h2 className="text-3xl font-bold tracking-tight text-white mt-1">{t('homepage.aiDemoHeading')}</h2>
+                    <p className="text-slate-300 text-sm mt-2">{t('homepage.aiDemoSubheading')}</p>
                 </div>
 
                 <div className="max-w-2xl mx-auto relative z-10">
@@ -629,7 +633,7 @@ const AiInActionSection = () => {
                             type="text"
                             value={jobTitle}
                             onChange={(e) => setJobTitle(e.target.value)}
-                            placeholder="e.g., Structural Welder, Electrician..."
+                            placeholder={t('homepage.aiDemoPlaceholder')}
                             className="flex-grow px-5 py-3.5 bg-slate-950/80 border border-slate-700 text-white rounded-full focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/40 font-mono text-sm placeholder:text-slate-500"
                         />
                         <button
@@ -638,11 +642,11 @@ const AiInActionSection = () => {
                             className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase px-8 py-3.5 rounded-full font-bold shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {isGenerating ? (
-                                <span>Generating...</span>
+                                <span>{t('homepage.aiDemoGenerating')}</span>
                             ) : (
                                 <>
                                     <Sparkles size={18} />
-                                    Generate Ad
+                                    {t('homepage.aiDemoGenerateAd')}
                                 </>
                             )}
                         </button>
@@ -657,7 +661,7 @@ const AiInActionSection = () => {
                     {generatedJD && (
                         <div className="mt-6 p-6 rounded-2xl bg-slate-950/90 border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed shadow-xl">
                             <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-cyan-400 font-mono">
-                                <span>AI Studio Output</span>
+                                <span>{t('homepage.aiDemoOutputLabel')}</span>
                                 <span>Engine: Gemini 2.5 Flash</span>
                             </div>
                             {generatedJD}
@@ -670,33 +674,34 @@ const AiInActionSection = () => {
 };
 
 const ComparisonSection = () => {
+    const { t } = useLocale();
     const rows = [
         {
-            capability: 'Skilled Trades Specialized Matching',
-            ezjob: 'AI algorithm',
-            generic: 'Keyword only',
+            capability: t('homepage.compRow1Capability'),
+            ezjob: t('homepage.compRow1Ezjob'),
+            generic: t('homepage.compRow1Generic'),
         },
         {
-            capability: 'Digital Skill Passport & Verification',
-            ezjob: 'Integrity score',
-            generic: 'PDF upload only',
+            capability: t('homepage.compRow2Capability'),
+            ezjob: t('homepage.compRow2Ezjob'),
+            generic: t('homepage.compRow2Generic'),
         },
         {
-            capability: '1-Click AI Requisition Studio',
-            ezjob: 'Built-in (Gemini AI)',
-            generic: 'Manual entry',
+            capability: t('homepage.compRow3Capability'),
+            ezjob: t('homepage.compRow3Ezjob'),
+            generic: t('homepage.compRow3Generic'),
         },
         {
-            capability: 'Direct Worker Video Portfolios',
-            ezjob: 'Integrated',
-            generic: 'Not supported',
+            capability: t('homepage.compRow4Capability'),
+            ezjob: t('homepage.compRow4Ezjob'),
+            generic: t('homepage.compRow4Generic'),
         },
     ];
 
     return (
         <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
             <Reveal className="text-center max-w-2xl mx-auto mb-10">
-                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">EZJOB by LENIX vs. Generic Portals</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.comparisonHeading')}</h2>
             </Reveal>
 
             {/* A wipe, not a fade — dramatizes the comparison as a change of
@@ -707,9 +712,9 @@ const ComparisonSection = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white font-mono text-xs uppercase border-b border-slate-200 dark:border-slate-800">
-                                <th className="py-4 px-6 font-semibold">Capability</th>
-                                <th className="py-4 px-6 font-semibold text-cyan-600 dark:text-cyan-400 text-center">EZJOB by LENIX</th>
-                                <th className="py-4 px-6 font-semibold text-slate-500 dark:text-slate-400 text-center">Generic Job Boards</th>
+                                <th className="py-4 px-6 font-semibold">{t('homepage.comparisonCapabilityHeader')}</th>
+                                <th className="py-4 px-6 font-semibold text-cyan-600 dark:text-cyan-400 text-center">{t('homepage.comparisonEzjobHeader')}</th>
+                                <th className="py-4 px-6 font-semibold text-slate-500 dark:text-slate-400 text-center">{t('homepage.comparisonGenericHeader')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm text-slate-700 dark:text-slate-300">
@@ -739,13 +744,14 @@ const ComparisonSection = () => {
 };
 
 const TestimonialsSection = () => {
+    const { t } = useLocale();
     const { homepageContent } = useSiteContent();
 
     return (
         <section className="py-20 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
                 <Reveal className="text-center max-w-2xl mx-auto mb-12">
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Endorsed by Industry Leaders</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.testimonialsHeading')}</h2>
                 </Reveal>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -772,6 +778,7 @@ const TestimonialsSection = () => {
 };
 
 const FaqSection = () => {
+    const { t } = useLocale();
     const [openIndex, setOpenIndex] = useState<number | null>(0);
     const { homepageContent } = useSiteContent();
 
@@ -779,9 +786,9 @@ const FaqSection = () => {
         <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full transition-colors duration-300">
             <Reveal className="text-center mb-10">
                 <span className="font-mono text-xs uppercase tracking-widest text-cyan-700 dark:text-cyan-400 font-bold">
-                    Support & Information
+                    {t('homepage.faqEyebrow')}
                 </span>
-                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">Frequently Asked Questions</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">{t('homepage.faqHeading')}</h2>
             </Reveal>
 
             <div className="space-y-3">
@@ -811,6 +818,7 @@ const FaqSection = () => {
 
 const FinalCtaSection = () => {
     const navigate = useNavigate();
+    const { t } = useLocale();
 
     return (
         <section className="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900 dark:bg-slate-950 text-white relative overflow-hidden transition-colors duration-300">
@@ -822,9 +830,9 @@ const FinalCtaSection = () => {
             />
 
             <Reveal className="max-w-4xl mx-auto text-center relative z-10">
-                <h2 className="text-3xl font-bold tracking-tight text-white mb-4">Ready to Deploy or Build Your Career?</h2>
+                <h2 className="text-3xl font-bold tracking-tight text-white mb-4">{t('homepage.ctaHeading')}</h2>
                 <p className="text-slate-300 text-sm max-w-xl mx-auto mb-8 leading-relaxed">
-                    Join thousands of verified skilled trades professionals and tier-1 employers on EZJOB by LENIX.
+                    {t('homepage.ctaSubheading')}
                 </p>
                 {/* Converging close: the two final actions arrive from opposite
                     edges and meet at center as the page resolves, instead of
@@ -835,7 +843,7 @@ const FinalCtaSection = () => {
                             onClick={() => navigate('/register', { state: { role: UserRole.WORKER } })}
                             className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono text-xs uppercase tracking-wider font-bold py-3.5 px-8 rounded-full shadow-lg transition-all cursor-pointer active:scale-[0.98]"
                         >
-                            Create Skill Passport
+                            {t('homepage.ctaCreatePassport')}
                         </button>
                     </Reveal>
                     <Reveal from="right" delayMs={100}>
@@ -843,7 +851,7 @@ const FinalCtaSection = () => {
                             onClick={() => navigate('/register', { state: { role: UserRole.EMPLOYER } })}
                             className="bg-slate-950 dark:bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 font-mono text-xs uppercase tracking-wider font-semibold py-3.5 px-8 rounded-full transition-all cursor-pointer active:scale-[0.98]"
                         >
-                            Post a Role
+                            {t('homepage.postARole')}
                         </button>
                     </Reveal>
                 </div>
