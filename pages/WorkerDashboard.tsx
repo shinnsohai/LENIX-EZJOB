@@ -20,7 +20,7 @@ import VideoLinkInput from '../components/forms/VideoLinkInput';
 import DynamicTradeForm from '../components/forms/DynamicTradeForm';
 import PassportLayout from '../components/profile/PassportLayout';
 import Spinner from '../components/Spinner';
-import { Upload, Edit3, Plus, Trash2, FileCheck, AlertTriangle } from 'lucide-react';
+import { Upload, Edit3, Plus, Trash2, FileCheck, AlertTriangle, Camera, User } from 'lucide-react';
 import type { WorkerProfile, Project, Certification, Reference, UserSkill } from '../types';
 import { countries } from '../data/countries';
 
@@ -32,6 +32,7 @@ export default function WorkerDashboard() {
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const cvInputRef = useRef<HTMLInputElement>(null);
+    const photoInputRef = useRef<HTMLInputElement>(null);
 
     // Main Profile State
     const [profile, setProfile] = useState<WorkerProfile>({
@@ -311,6 +312,39 @@ export default function WorkerDashboard() {
         }
     };
 
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (!file.type.startsWith('image/')) {
+                showToast("Please upload an image file (JPG, PNG, or WEBP).", 'error');
+                if (photoInputRef.current) photoInputRef.current.value = '';
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("Image must be less than 5MB", 'error');
+                if (photoInputRef.current) photoInputRef.current.value = '';
+                return;
+            }
+            const uid = user?.id;
+            if (!uid) return;
+            setLoading(true);
+            try {
+                const downloadUrl = await uploadFile('worker-photos', uid, file);
+
+                const updatedProfile = { ...profile, photo_url: downloadUrl, user_id: uid };
+                await saveWorkerProfile(updatedProfile);
+                setProfile(updatedProfile);
+                showToast("Profile photo updated!", 'success');
+            } catch (error) {
+                console.error("Error uploading profile photo:", error);
+                showToast("Failed to upload profile photo.", 'error');
+            } finally {
+                setLoading(false);
+                if (photoInputRef.current) photoInputRef.current.value = '';
+            }
+        }
+    };
+
     const handleCVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -431,6 +465,47 @@ export default function WorkerDashboard() {
             {/* --- Step 1: Basics --- */}
             {step === 1 && (
                 <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center gap-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <div className="relative shrink-0">
+                            <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                {profile.photo_url ? (
+                                    <img src={profile.photo_url} alt="Profile photo" className="w-full h-full object-cover" />
+                                ) : (
+                                    <User size={36} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => photoInputRef.current?.click()}
+                                className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md transition-colors cursor-pointer"
+                                title={profile.photo_url ? 'Change photo' : 'Upload photo'}
+                                aria-label={profile.photo_url ? 'Change profile photo' : 'Upload profile photo'}
+                            >
+                                <Camera size={16} aria-hidden="true" />
+                            </button>
+                            <input
+                                ref={photoInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                onChange={handlePhotoUpload}
+                                className="hidden"
+                            />
+                        </div>
+                        <div>
+                            <h3 className="font-medium text-slate-800 dark:text-white">Profile Photo</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">A clear headshot builds trust with employers.</p>
+                            {profile.photo_url && (
+                                <button
+                                    type="button"
+                                    onClick={() => setProfile({ ...profile, photo_url: '' })}
+                                    className="mt-1 text-sm text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                    <Trash2 size={14} aria-hidden="true" /> Remove photo
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
                         <input
