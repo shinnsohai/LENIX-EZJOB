@@ -29,3 +29,6 @@ dist-ssr
 .agents/
 .claude/skills/
 skills-lock.json
+
+# Generated i18n translation exports (working files, regenerate via npm run i18n:export)
+i18n-exports/
