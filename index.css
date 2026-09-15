@@ -101,10 +101,9 @@
         margin: 14mm 12mm;
     }
 
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-
     html, body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
         background: #ffffff !important;
         color: #0f172a !important;
     }
