@@ -89,7 +89,6 @@ export interface WorkerProfile {
     status?: 'Active' | 'Suspended';
 
     // Extended properties
-    trade?: string; // Deprecated
     physical_attributes?: PhysicalAttributes;
     media_links?: MediaLinks;
     trade_specifics?: TradeSpecifics; // Kept for backward compatibility (Primary Tags)

@@ -38,7 +38,6 @@ export default function WorkerDashboard() {
         id: '',
         user_id: '',
         full_name: '',
-        trade: '', // Deprecated
         trade_or_skill: '',
         bio: '',
         physical_attributes: { height_cm: 0, weight_kg: 0, handedness: 'Right', color_blindness: false },
