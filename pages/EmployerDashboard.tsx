@@ -168,8 +168,9 @@ const SearchWorkersPanel: React.FC = () => {
             if (worker) {
                 // Open Skill Passport page in new tab. getWorkerProfile looks
                 // up by auth user id, so the link must use user_id, not the
-                // worker_profiles row's own id.
-                const passportUrl = `${window.location.origin}/#/worker/profile/${worker.user_id}`;
+                // worker_profiles row's own id. Router-safe link (no HashRouter
+                // '/#' prefix) now that the app uses BrowserRouter.
+                const passportUrl = `${window.location.origin}/worker/profile/${worker.user_id}`;
                 window.open(passportUrl, '_blank');
             }
         });

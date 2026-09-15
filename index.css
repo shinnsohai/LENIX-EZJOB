@@ -87,30 +87,68 @@
     }
 }
 
+/* Print / "Export PDF" (window.print()) styles for the Skill Passport.
+   A printed page is always a plain light physical sheet — there's no dark
+   mode on paper — so this forces a high-contrast light-on-white palette
+   across the whole passport regardless of the on-screen theme or accent
+   colors, rather than trying to preserve the dark UI (which previously
+   left light-gray text nearly invisible against unprinted white paper
+   whenever the browser's "print background graphics" option was off,
+   which is the common default). */
 @media print {
     @page {
-        size: A3 portrait;
-        margin: 0;
-    }
-    
-    body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        background-color: #0f172a !important;
-        color: #e2e8f0 !important;
+        size: A4 portrait;
+        margin: 14mm 12mm;
     }
 
-    /* Hide non-printable elements */
-    .no-print, 
-    button, 
-    nav, 
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+
+    html, body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    /* Hide anything only useful on screen: nav/action buttons, theme
+       toggle, and the video-embed cards (a paper printout can't play a
+       video, and empty "No Video Provided" placeholders are just noise). */
+    .no-print,
+    button,
+    nav,
     footer,
     .sticky,
-    .fixed {
+    .fixed,
+    [data-print-hide] {
         display: none !important;
     }
 
-    /* Ensure main content is visible and takes full width */
+    /* Force every descendant of the printable passport to a plain
+       light-on-white palette in one place, instead of fighting each
+       individual dark:/gradient/accent Tailwind class. */
+    #passport-print-root,
+    #passport-print-root * {
+        background: #ffffff !important;
+        background-image: none !important;
+        color: #0f172a !important;
+        box-shadow: none !important;
+        border-color: #cbd5e1 !important;
+        text-shadow: none !important;
+    }
+
+    /* Cards shouldn't split awkwardly across a page boundary. */
+    #passport-print-root .rounded-2xl,
+    #passport-print-root .rounded-3xl {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #cbd5e1 !important;
+    }
+
+    /* Show the print-only masthead (hidden on screen). */
+    #pdf-header {
+        display: block !important;
+        margin-bottom: 16px;
+    }
+
     #root, main, .max-w-7xl {
         width: 100% !important;
         max-width: none !important;
@@ -119,32 +157,16 @@
         overflow: visible !important;
     }
 
-    /* Show PDF Header */
-    #pdf-header {
-        display: block !important;
-        margin-bottom: 20px;
-    }
-
-    /* Ensure text contrast */
-    h1, h2, h3, h4, h5, h6 {
-        color: white !important;
-    }
-    
-    p, span, div {
-        color: #cbd5e1 !important;
-    }
-
-    /* Fix grid layouts for print */
+    /* Stack the two-column layout into one column for a normal page width. */
     .grid {
         display: block !important;
     }
-    
+
     .lg\:col-span-4, .lg\:col-span-8 {
         width: 100% !important;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
     }
 
-    /* Ensure images are visible */
     img {
         max-width: 100% !important;
         display: block !important;

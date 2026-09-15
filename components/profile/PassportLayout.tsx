@@ -42,7 +42,9 @@ export default function PassportLayout({ profile, projects, certs, references, o
 
   const handleShare = () => {
     // Router-safe link (no HashRouter '/#' prefix) now that the app uses BrowserRouter.
-    const url = `${window.location.origin}/worker/profile/${profile.id}`;
+    // Must be user_id, not the worker_profiles row's own id — getWorkerProfile()
+    // (which PublicWorkerProfile calls) looks up by user_id.
+    const url = `${window.location.origin}/worker/profile/${profile.user_id}`;
     navigator.clipboard.writeText(url).then(() => {
       setIsSharing(true);
       setShareError(null);
@@ -173,7 +175,7 @@ export default function PassportLayout({ profile, projects, certs, references, o
         )}
       </div>
 
-      <div ref={passportRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div ref={passportRef} id="passport-print-root" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Printable Header */}
         <div id="pdf-header" className="hidden mb-6 text-center border-b border-slate-200 dark:border-slate-800 pb-4">
           <h1 className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-wider">EZJOB by LENIX</h1>
@@ -270,8 +272,8 @@ export default function PassportLayout({ profile, projects, certs, references, o
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left Column (Video demos & Physical attributes) */}
           <div className="lg:col-span-4 space-y-6">
-            {/* Intro Video */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm p-5 transition-colors">
+            {/* Intro Video — screen only; a paper printout can't play a video. */}
+            <div data-print-hide className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm p-5 transition-colors">
               <h3 className="font-mono text-xs uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-bold mb-3 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
                 Video Introduction
@@ -279,8 +281,8 @@ export default function PassportLayout({ profile, projects, certs, references, o
               <VideoEmbed url={profile.media_links?.intro_video_url} label="Intro" />
             </div>
 
-            {/* Skill Demo Video */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm p-5 transition-colors">
+            {/* Skill Demo Video — screen only; a paper printout can't play a video. */}
+            <div data-print-hide className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm p-5 transition-colors">
               <h3 className="font-mono text-xs uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-bold mb-3 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></span>
                 On-Site Skill Demonstration
