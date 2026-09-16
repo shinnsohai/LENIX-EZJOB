@@ -18,6 +18,13 @@ import {
     X,
     Plus,
     Minus,
+    IdCard,
+    Video,
+    UserPlus,
+    Search,
+    Eye,
+    Gem,
+    ArrowDown,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -446,6 +453,111 @@ const HeroSection = () => {
                 <div className="lg:col-span-12">
                     <CrewLineup />
                 </div>
+            </div>
+        </section>
+    );
+};
+
+type HowItWorksAudience = 'worker' | 'employer';
+
+/** Worker/Employer toggle over a 3-step journey plus a 4-item feature grid.
+ * Tab switch re-triggers this file's one approved keyframe (animate-fade-in-up)
+ * via a `key` remount rather than introducing a second one. The connecting
+ * arrow between step cards is a real flex sibling (ArrowRight desktop /
+ * ArrowDown mobile), not an absolutely-positioned pseudo-element with a
+ * guessed pixel offset — centers correctly regardless of card width. */
+const HowItWorksSection = () => {
+    const { t } = useLocale();
+    const [audience, setAudience] = useState<HowItWorksAudience>('worker');
+
+    const workerSteps = [
+        { icon: IdCard, title: t('homepage.howItWorksWorkerStep1Title'), desc: t('homepage.howItWorksWorkerStep1Desc') },
+        { icon: Video, title: t('homepage.howItWorksWorkerStep2Title'), desc: t('homepage.howItWorksWorkerStep2Desc') },
+        { icon: UserPlus, title: t('homepage.howItWorksWorkerStep3Title'), desc: t('homepage.howItWorksWorkerStep3Desc') },
+    ];
+    const employerSteps = [
+        { icon: Search, title: t('homepage.howItWorksEmployerStep1Title'), desc: t('homepage.howItWorksEmployerStep1Desc') },
+        { icon: Eye, title: t('homepage.howItWorksEmployerStep2Title'), desc: t('homepage.howItWorksEmployerStep2Desc') },
+        { icon: ShieldCheck, title: t('homepage.howItWorksEmployerStep3Title'), desc: t('homepage.howItWorksEmployerStep3Desc') },
+    ];
+    const steps = audience === 'worker' ? workerSteps : employerSteps;
+
+    const features = [
+        { icon: IdCard, title: t('homepage.howItWorksFeaturePassportTitle'), desc: t('homepage.howItWorksFeaturePassportDesc') },
+        { icon: Shield, title: t('homepage.howItWorksFeatureBondTitle'), desc: t('homepage.howItWorksFeatureBondDesc') },
+        { icon: Bot, title: t('homepage.howItWorksFeatureAiTitle'), desc: t('homepage.howItWorksFeatureAiDesc') },
+        { icon: Gem, title: t('homepage.howItWorksFeatureFreemiumTitle'), desc: t('homepage.howItWorksFeatureFreemiumDesc') },
+    ];
+
+    return (
+        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+            <Reveal className="text-center max-w-2xl mx-auto mb-10">
+                <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.howItWorksHeading')}</h2>
+            </Reveal>
+
+            <Reveal className="flex justify-center mb-12">
+                <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-full shadow-inner">
+                    {(['worker', 'employer'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setAudience(tab)}
+                            aria-pressed={audience === tab}
+                            className={`px-6 sm:px-8 py-3 rounded-full font-mono text-xs uppercase tracking-wider font-bold transition-all cursor-pointer min-w-[140px] ${
+                                audience === tab
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                            }`}
+                        >
+                            {tab === 'worker' ? t('homepage.howItWorksForWorkers') : t('homepage.howItWorksForEmployers')}
+                        </button>
+                    ))}
+                </div>
+            </Reveal>
+
+            <div key={audience} className="mb-16 animate-fade-in-up">
+                <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-0">
+                    {steps.map((step, i) => {
+                        const Icon = step.icon;
+                        return (
+                            <React.Fragment key={i}>
+                                <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:border-cyan-400/60 dark:hover:border-cyan-500/50 hover:-translate-y-1 transition-all p-7 flex flex-col items-center text-center">
+                                    <span className="w-8 h-8 rounded-full bg-slate-900 dark:bg-cyan-500 text-cyan-400 dark:text-slate-950 font-mono font-bold text-sm flex items-center justify-center mb-4">
+                                        {i + 1}
+                                    </span>
+                                    <Icon size={40} strokeWidth={1.5} className="text-slate-900 dark:text-white mb-4" aria-hidden="true" />
+                                    <h3 className="font-bold text-slate-900 dark:text-white mb-2">{step.title}</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{step.desc}</p>
+                                </div>
+                                {i < steps.length - 1 && (
+                                    <div className="flex items-center justify-center shrink-0 px-1 md:px-2" aria-hidden="true">
+                                        <ArrowRight size={20} className="hidden md:block text-slate-300 dark:text-slate-700" />
+                                        <ArrowDown size={20} className="md:hidden text-slate-300 dark:text-slate-700" />
+                                    </div>
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {features.map((f, i) => {
+                    const Icon = f.icon;
+                    return (
+                        <Reveal key={i} from="scale" delayMs={i * 70}>
+                            <div className="h-full bg-slate-50 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900 border-l-4 border-transparent hover:border-cyan-500 rounded-xl p-6 flex items-start gap-4 transition-all hover:shadow-lg">
+                                <div className="shrink-0 w-10 h-10 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-cyan-400 flex items-center justify-center">
+                                    <Icon size={20} aria-hidden="true" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-1">{f.title}</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{f.desc}</p>
+                                </div>
+                            </div>
+                        </Reveal>
+                    );
+                })}
             </div>
         </section>
     );
@@ -938,6 +1050,7 @@ const HomePage: React.FC = () => {
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
             <HeroSection />
+            <HowItWorksSection />
             <HighVelocityRolesSection />
             <FeaturesSection />
             <AiInActionSection />
