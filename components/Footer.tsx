@@ -47,7 +47,7 @@ const Footer: React.FC = () => {
                     {/* Column 1: Logo and About */}
                     <div className="md:col-span-1 flex flex-col gap-3">
                         <div className="flex items-center gap-2.5 flex-wrap p-2 rounded-2xl bg-gradient-to-r from-slate-200/60 via-white/80 to-slate-200/60 dark:from-slate-900/90 dark:via-slate-950/80 dark:to-slate-900/90 border border-slate-200 dark:border-slate-800/80 w-fit">
-                            <BrandLogoCluster ezjobLogoUrl={siteAssets.logoUrl} variant="footer" />
+                            <BrandLogoCluster ezjobLogoUrl={siteAssets.logoUrl} />
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
                             {t('footer.tagline')}

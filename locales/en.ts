@@ -7,6 +7,8 @@
 // page by page, same as the rest of this project's craft passes.
 const en = {
     'nav.findJobs': 'Find Jobs',
+    'nav.services': 'Our Services',
+    'nav.solutions': 'Our Solutions',
     'nav.adminConsole': 'Admin Console',
     'nav.employerStudio': 'Employer Studio',
     'nav.forEmployers': 'For Employers',
@@ -25,6 +27,7 @@ const en = {
     'header.language': 'Language',
 
     'common.perYear': '/ yr',
+    'common.loading': 'Loading…',
 
     'footer.tagline': 'A Clarity E&C Holding enterprise solution powered by LENIX technology. Precision recruitment and authenticated skill credentialing for the skilled trades.',
     'footer.aiEngineActive': 'AI Engine Active',

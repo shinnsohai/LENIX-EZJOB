@@ -2,6 +2,8 @@ import type { UIStrings } from './index';
 
 const bn: UIStrings = {
     'nav.findJobs': 'চাকরি খুঁজুন',
+    'nav.services': 'আমাদের সেবা',
+    'nav.solutions': 'আমাদের সমাধান',
     'nav.adminConsole': 'অ্যাডমিন কনসোল',
     'nav.employerStudio': 'নিয়োগকর্তা স্টুডিও',
     'nav.forEmployers': 'নিয়োগকর্তাদের জন্য',
@@ -20,6 +22,7 @@ const bn: UIStrings = {
     'header.language': 'ভাষা',
 
     'common.perYear': '/ বছর',
+    'common.loading': 'লোড হচ্ছে…',
 
     'footer.tagline': 'LENIX প্রযুক্তি দ্বারা পরিচালিত একটি Clarity E&C হোল্ডিং এন্টারপ্রাইজ সমাধান। দক্ষ শ্রমিকদের জন্য নির্ভুল নিয়োগ এবং প্রমাণিত দক্ষতা সনদায়ন।',
     'footer.aiEngineActive': 'এআই ইঞ্জিন সক্রিয়',

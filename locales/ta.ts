@@ -2,6 +2,8 @@ import type { UIStrings } from './index';
 
 const ta: UIStrings = {
     'nav.findJobs': 'வேலை தேடு',
+    'nav.services': 'எங்கள் சேவைகள்',
+    'nav.solutions': 'எங்கள் தீர்வுகள்',
     'nav.adminConsole': 'நிர்வாக பணியகம்',
     'nav.employerStudio': 'முதலாளர் ஸ்டுடியோ',
     'nav.forEmployers': 'முதலாளர்களுக்கு',
@@ -20,6 +22,7 @@ const ta: UIStrings = {
     'header.language': 'மொழி',
 
     'common.perYear': '/ ஆண்டு',
+    'common.loading': 'ஏற்றுகிறது…',
 
     'footer.tagline': 'LENIX தொழில்நுட்பத்தால் இயக்கப்படும் Clarity E&C ஹோல்டிங் நிறுவன தீர்வு. திறமையான தொழிலாளர்களுக்கான துல்லியமான ஆட்சேர்ப்பு மற்றும் சரிபார்க்கப்பட்ட திறன் சான்றிதழ்.',
     'footer.aiEngineActive': 'AI இயந்திரம் இயங்குகிறது',

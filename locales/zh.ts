@@ -2,6 +2,8 @@ import type { UIStrings } from './index';
 
 const zh: UIStrings = {
     'nav.findJobs': '找工作',
+    'nav.services': '我们的服务',
+    'nav.solutions': '我们的解决方案',
     'nav.adminConsole': '管理控制台',
     'nav.employerStudio': '雇主工作室',
     'nav.forEmployers': '雇主专区',
@@ -20,6 +22,7 @@ const zh: UIStrings = {
     'header.language': '语言',
 
     'common.perYear': '/ 年',
+    'common.loading': '加载中…',
 
     'footer.tagline': 'Clarity E&C 控股企业解决方案，由 LENIX 技术提供支持。为技术工种提供精准招聘与真实技能认证。',
     'footer.aiEngineActive': 'AI 引擎运行中',

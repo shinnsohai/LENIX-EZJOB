@@ -15,7 +15,7 @@ const AboutUsPage: React.FC = () => {
                 {/* Brand Showcase Header */}
                 <div className="text-center space-y-5 animate-fade-in-up">
                     <div className="inline-flex items-center gap-3 bg-gradient-to-r from-slate-100 via-white to-slate-100 dark:from-slate-900/90 dark:via-slate-950/90 dark:to-slate-900/90 border border-slate-200 dark:border-slate-800/80 p-2.5 sm:p-3 rounded-2xl shadow-sm mx-auto flex-wrap justify-center">
-                        <BrandLogoCluster variant="footer" />
+                        <BrandLogoCluster />
                     </div>
 
                     <h1 className="text-4xl sm:text-5xl font-semibold tracking-tighter leading-[1.05]">
