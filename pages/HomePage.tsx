@@ -246,6 +246,164 @@ const StatCounter: React.FC<{ target: number; suffix: string; active: boolean; c
 /** Strips a leading hyphen/en-dash/em-dash (and any surrounding whitespace) that legacy attribution strings may carry, so nothing in this file ever renders a dash as a design flourish. */
 const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
 
+/** Cursor position within an element (relative to its own top-left), eased
+ * toward the pointer's actual position each frame rather than snapping
+ * directly to it — the "slight easing/lerp" the crew-lineup spotlight rides
+ * on. Resolves to `null` (no spotlight) once the pointer leaves the element,
+ * and never chases anything under reduced motion — the scroll-driven reveal
+ * in CrewGlowLineup is the only mechanism in that case, matching this file's
+ * settle-to-a-static-final-state convention for every other motion hook. */
+function usePointerInElement<T extends HTMLElement>(nodeRef: React.RefObject<T | null>) {
+    const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+    const targetRef = useRef<{ x: number; y: number } | null>(null);
+    const rafRef = useRef(0);
+    const runningRef = useRef(false);
+
+    useEffect(() => {
+        const node = nodeRef.current;
+        if (!node) return;
+
+        const reduced =
+            typeof window !== 'undefined' && window.matchMedia
+                ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                : false;
+        if (reduced) return; // pos stays null — no cursor-chasing spotlight.
+
+        // The rAF loop only runs while there's actually something to animate
+        // toward (or one last frame settling back to hidden on mouse-leave)
+        // — not continuously for as long as the homepage happens to be open.
+        const tick = () => {
+            const target = targetRef.current;
+            setPos(prev => {
+                if (!target) return null;
+                if (!prev) return target;
+                const ease = 0.18;
+                return { x: prev.x + (target.x - prev.x) * ease, y: prev.y + (target.y - prev.y) * ease };
+            });
+            if (target) {
+                rafRef.current = requestAnimationFrame(tick);
+            } else {
+                runningRef.current = false;
+            }
+        };
+        const ensureRunning = () => {
+            if (runningRef.current) return;
+            runningRef.current = true;
+            rafRef.current = requestAnimationFrame(tick);
+        };
+
+        const onMove = (e: MouseEvent) => {
+            const rect = node.getBoundingClientRect();
+            targetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            ensureRunning();
+        };
+        const onLeave = () => {
+            targetRef.current = null;
+            ensureRunning(); // one final frame to clear pos, then it stops itself.
+        };
+
+        node.addEventListener('mousemove', onMove);
+        node.addEventListener('mouseleave', onLeave);
+        return () => {
+            node.removeEventListener('mousemove', onMove);
+            node.removeEventListener('mouseleave', onLeave);
+            runningRef.current = false;
+            cancelAnimationFrame(rafRef.current);
+        };
+    }, [nodeRef]);
+
+    return pos;
+}
+
+const CREW_PHOTO_COUNT = 12;
+const CREW_PHOTOS = Array.from(
+    { length: CREW_PHOTO_COUNT },
+    (_, i) => `/assets/crew/worker-${String(i + 1).padStart(2, '0')}.webp`
+);
+
+/** Twelve verified crew members standing in a row, dim by default, that a
+ * visitor uncovers with a soft cursor-following spotlight — a "glow" that
+ * lights up both the workers and the strip's own background together, not
+ * just cuts out the figures. Scrolling through the strip opens the same
+ * spotlight outward from center regardless of the pointer, so everyone is
+ * visible by the time it's scrolled past — the one mechanism that also
+ * works on touch devices, which have no hover at all. */
+const CrewGlowLineup = () => {
+    const { ref: scrollRef, progress: scrollProgress } = useScrollProgress<HTMLDivElement>(0);
+    const pos = usePointerInElement<HTMLDivElement>(scrollRef);
+
+    const HOVER_RADIUS = 260; // px, per spec
+    const BIG_RADIUS = 2000; // large enough to cover the whole strip from center
+    // Ramps 0 -> BIG_RADIUS as the strip travels through the middle of the
+    // scroll range it's actually visible in, not the full enter-to-exit
+    // range (which would only finish revealing as it scrolls out of view).
+    const scrollDrivenRadius = Math.min(1, Math.max(0, (scrollProgress - 0.15) / 0.4)) * BIG_RADIUS;
+
+    const radius = pos ? HOVER_RADIUS : scrollDrivenRadius;
+    const cx = pos ? `${pos.x}px` : '50%';
+    const cy = pos ? `${pos.y}px` : '50%';
+    const revealed = radius > 1;
+    const maskImage = revealed
+        ? `radial-gradient(circle ${radius}px at ${cx} ${cy}, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%)`
+        : undefined;
+
+    return (
+        <div
+            ref={scrollRef}
+            role="img"
+            aria-label="Photos of EZJOB's verified skilled trades workforce"
+            className="relative h-56 sm:h-64 lg:h-72 rounded-2xl overflow-hidden bg-slate-950 border border-slate-800"
+        >
+            {/* Base row: dim and desaturated, always faintly present so the
+                strip reads as something to discover, not an empty band. */}
+            <div className="absolute inset-0 flex overflow-x-auto sm:overflow-visible">
+                {CREW_PHOTOS.map((src, i) => (
+                    <img
+                        key={`base-${i}`}
+                        src={src}
+                        alt=""
+                        aria-hidden="true"
+                        loading="lazy"
+                        draggable={false}
+                        className="flex-none w-20 sm:w-auto sm:flex-1 sm:min-w-0 h-full object-contain object-bottom opacity-40 grayscale brightness-[0.45] select-none"
+                    />
+                ))}
+            </div>
+
+            {/* Reveal row: full colour, clipped to the spotlight above.
+                pointer-events: none — it must never intercept the cursor
+                that's driving it. */}
+            <div
+                className="absolute inset-0 flex pointer-events-none transition-opacity duration-300 ease-out"
+                style={{ opacity: revealed ? 1 : 0, WebkitMaskImage: maskImage, maskImage }}
+            >
+                {CREW_PHOTOS.map((src, i) => (
+                    <img
+                        key={`reveal-${i}`}
+                        src={src}
+                        alt=""
+                        aria-hidden="true"
+                        loading="lazy"
+                        draggable={false}
+                        className="flex-none w-20 sm:w-auto sm:flex-1 sm:min-w-0 h-full object-contain object-bottom select-none"
+                    />
+                ))}
+            </div>
+
+            {/* Decorative light — the glow itself, additive over both the
+                workers and the dark strip background around them. */}
+            {pos && (
+                <div
+                    className="absolute inset-0 pointer-events-none mix-blend-screen"
+                    style={{
+                        background: `radial-gradient(circle 260px at ${pos.x}px ${pos.y}px, rgba(34,211,238,0.35) 0%, rgba(34,211,238,0.12) 45%, transparent 75%)`,
+                    }}
+                />
+            )}
+        </div>
+    );
+};
+
 const HeroSection = () => {
     const navigate = useNavigate();
     const { t } = useLocale();
@@ -371,6 +529,11 @@ const HeroSection = () => {
                             loading="eager"
                         />
                     </div>
+                </div>
+
+                {/* Crew glow lineup — full width, below both columns. */}
+                <div className="lg:col-span-12">
+                    <CrewGlowLineup />
                 </div>
             </div>
         </section>
