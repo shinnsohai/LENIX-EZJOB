@@ -284,18 +284,47 @@ const CREW_PHOTOS = Array.from(
     (_, i) => `/assets/crew/worker-${String(i + 1).padStart(2, '0')}.webp`
 );
 
+// Illustrative personas for the hover tooltip — not real EZJOB workers, same
+// spirit as this page's other illustrative content (the sample role cards in
+// HighVelocityRolesSection). Nationalities picked for a plausible SG/MY
+// skilled-trades workforce mix, deliberately overlapping this app's own
+// supported languages (MY, BD, CN, MM) among others. storyKey is a literal
+// tuple type, not a template-constructed string, so it still type-checks
+// against t()'s keyof UIStrings constraint.
+const CREW_STORY_KEYS = [
+    'homepage.crewStory1', 'homepage.crewStory2', 'homepage.crewStory3', 'homepage.crewStory4',
+    'homepage.crewStory5', 'homepage.crewStory6', 'homepage.crewStory7', 'homepage.crewStory8',
+    'homepage.crewStory9', 'homepage.crewStory10', 'homepage.crewStory11', 'homepage.crewStory12',
+] as const;
+const CREW_PERSONS: { flag: string; name: string }[] = [
+    { flag: '🇲🇾', name: 'Nur Aisyah' },
+    { flag: '🇧🇩', name: 'Abdul Karim' },
+    { flag: '🇵🇭', name: 'Maria Santos' },
+    { flag: '🇮🇳', name: 'Karthik Raja' },
+    { flag: '🇻🇳', name: 'Lan Nguyen' },
+    { flag: '🇨🇳', name: 'Chen Wei' },
+    { flag: '🇮🇩', name: 'Budi Santoso' },
+    { flag: '🇲🇾', name: 'Siti Nurhaliza' },
+    { flag: '🇳🇵', name: 'Bishnu Thapa' },
+    { flag: '🇵🇰', name: 'Imran Ahmed' },
+    { flag: '🇲🇲', name: 'Thandar Win' },
+    { flag: '🇱🇰', name: 'Nimal Perera' },
+];
+
 /** Twelve verified crew members standing in a row directly on the hero's own
  * video background (no separate background photo of its own anymore — that
  * was needed when the hero sat on a flat color; now the hero itself supplies
  * the moving backdrop, and stacking a second photo here would just compete
- * with it). Hovering one crew member brings them forward at full clarity
- * while every other member fades back — plain React hover state per figure,
- * not CSS :has(): tried the pure-CSS version first, but this environment's
- * Chromium build matches :has() via `.matches()` without actually
- * invalidating computed style for it (a real, known class of bug in early
- * :has() implementations), so the fade silently never painted. Per-image
+ * with it). Hovering one crew member brings them forward at full clarity,
+ * fades every other member back, and pops a tooltip with their flag, name,
+ * and a one-line story — plain React hover state per figure, not CSS
+ * :has(): tried the pure-CSS version first, but this environment's Chromium
+ * build matches :has() via `.matches()` without actually invalidating
+ * computed style for it (a real, known class of bug in early :has()
+ * implementations), so the fade silently never painted. Per-image
  * onMouseEnter/onMouseLeave has no such ambiguity. */
 const CrewLineup = () => {
+    const { t } = useLocale();
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
     return (
@@ -309,19 +338,43 @@ const CrewLineup = () => {
                 {CREW_PHOTOS.map((src, i) => {
                     const isHovered = hoveredIndex === i;
                     const isDimmed = hoveredIndex !== null && !isHovered;
+                    const isFirst = i === 0;
+                    const isLast = i === CREW_PHOTOS.length - 1;
+                    const person = CREW_PERSONS[i];
+                    const tooltipAlign = isFirst ? 'left-0' : isLast ? 'right-0' : 'left-1/2 -translate-x-1/2';
+                    const arrowAlign = isFirst ? 'left-5' : isLast ? 'right-5' : 'left-1/2 -translate-x-1/2';
                     return (
-                        <img
-                            key={i}
-                            src={src}
-                            alt=""
-                            aria-hidden="true"
-                            loading="lazy"
-                            draggable={false}
-                            onMouseEnter={() => setHoveredIndex(i)}
-                            className={`flex-none w-20 sm:w-auto sm:flex-1 sm:min-w-0 h-[92%] object-contain object-bottom select-none transition-[opacity,filter,transform] duration-300 ease-out ${
-                                isDimmed ? 'opacity-40 grayscale' : 'opacity-100'
-                            } ${isHovered ? 'relative z-10 motion-safe:scale-110 motion-safe:-translate-y-2' : ''}`}
-                        />
+                        <div key={i} className="relative flex-none w-20 sm:w-auto sm:flex-1 sm:min-w-0 h-full flex items-end">
+                            {isHovered && (
+                                <div
+                                    role="tooltip"
+                                    className={`absolute bottom-full mb-3 ${tooltipAlign} z-20 w-48 pointer-events-none motion-safe:animate-fade-in-up`}
+                                >
+                                    <div className="bg-slate-900/95 border border-white/10 rounded-xl px-3.5 py-3 shadow-xl text-left backdrop-blur-md">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <span className="text-base leading-none" aria-hidden="true">{person.flag}</span>
+                                            <span className="font-mono text-xs font-bold text-white">{person.name}</span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-300 leading-snug">{t(CREW_STORY_KEYS[i])}</p>
+                                    </div>
+                                    <div
+                                        className={`absolute top-full ${arrowAlign} w-2.5 h-2.5 -mt-1.5 bg-slate-900/95 border-r border-b border-white/10 rotate-45`}
+                                        aria-hidden="true"
+                                    />
+                                </div>
+                            )}
+                            <img
+                                src={src}
+                                alt=""
+                                aria-hidden="true"
+                                loading="lazy"
+                                draggable={false}
+                                onMouseEnter={() => setHoveredIndex(i)}
+                                className={`w-full h-[92%] object-contain object-bottom select-none transition-[opacity,filter,transform] duration-300 ease-out ${
+                                    isDimmed ? 'opacity-40 grayscale' : 'opacity-100'
+                                } ${isHovered ? 'relative z-10 motion-safe:scale-110 motion-safe:-translate-y-2' : ''}`}
+                            />
+                        </div>
                     );
                 })}
             </div>
@@ -342,7 +395,7 @@ const HeroSection = () => {
     const videoOffset = -scrollY * 0.08;
 
     return (
-        <section className="relative w-full pt-16 sm:pt-20 pb-24 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-950 text-white transition-colors duration-300">
+        <section className="relative w-full min-h-[620px] sm:min-h-[680px] lg:min-h-[780px] pt-24 sm:pt-28 pb-8 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden bg-slate-950 text-white transition-colors duration-300">
             {/* Full-bleed looping promo video. The poster (the video's own first
                 frame) covers the gap before playback starts and stands in
                 entirely below md / under prefers-reduced-motion — the <video>
@@ -374,7 +427,7 @@ const HeroSection = () => {
                 aria-hidden="true"
             />
 
-            <div className="max-w-7xl mx-auto w-full relative z-10">
+            <div className="max-w-7xl mx-auto w-full flex-1 flex items-center relative z-10">
                 <div className="max-w-2xl flex flex-col gap-6 text-left">
                     {/* Eyebrow badge (1 of 3 allowed on this page) */}
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full w-fit shadow-sm">
@@ -449,11 +502,14 @@ const HeroSection = () => {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* Crew glow lineup — full width, standing directly on the video. */}
-                <div className="mt-14">
-                    <CrewLineup />
-                </div>
+            {/* Crew glow lineup — pinned toward the bottom of the hero (a
+                sibling of the flex-1 copy block above, not nested inside it),
+                so there's real separation from the headline instead of
+                sitting cramped right under the stats row. */}
+            <div className="max-w-7xl mx-auto w-full relative z-10 mt-10">
+                <CrewLineup />
             </div>
         </section>
     );

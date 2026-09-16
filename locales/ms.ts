@@ -182,6 +182,19 @@ const ms: UIStrings = {
     'homepage.howItWorksFeatureAiDesc': 'Pengesahan kemahiran dan kelayakan automatik untuk memastikan ketulenan.',
     'homepage.howItWorksFeatureFreemiumTitle': 'Model Freemium',
     'homepage.howItWorksFeatureFreemiumDesc': 'Percuma untuk pekerja, berpatutan untuk majikan — direka untuk skala dan keadilan.',
+
+    'homepage.crewStory1': 'Juruteknik fasiliti, 4 tahun memastikan tapak industri berjalan lancar.',
+    'homepage.crewStory2': 'Pakar penyelenggaraan am, membaiki apa yang orang lain sudah putus asa.',
+    'homepage.crewStory3': 'Ketua gudang & inventori, mengimbas beribu palet setiap minggu.',
+    'homepage.crewStory4': 'Tukang batu & kemasan struktur, generasi ketiga dalam bidang ini.',
+    'homepage.crewStory5': 'Pegawai keselamatan tapak, sifar insiden kehilangan masa kerja tahun ini.',
+    'homepage.crewStory6': 'Jurupasang mekanikal, pakar dalam jentera loji industri.',
+    'homepage.crewStory7': 'Penyelaras tapak, memastikan tiga pasukan mengikut jadual serentak.',
+    'homepage.crewStory8': 'Pemeriksa QA/QC, menangkap apa yang terlepas daripada senarai semak.',
+    'homepage.crewStory9': 'Juruikat, bertauliah dalam lima kelas kren yang berbeza.',
+    'homepage.crewStory10': 'Juruelektrik bertauliah, 8 tahun dalam sistem industri voltan tinggi.',
+    'homepage.crewStory11': 'Penyelaras logistik, orang pertama dihubungi bila penghantaran bermasalah.',
+    'homepage.crewStory12': 'Penyelia tapak, menjalankan taklimat pagi dengan tepat setiap kali.',
 };
 
 export default ms;

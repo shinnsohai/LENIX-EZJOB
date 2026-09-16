@@ -182,6 +182,19 @@ const zh: UIStrings = {
     'homepage.howItWorksFeatureAiDesc': '自动化的技能与资质验证,确保真实可信。',
     'homepage.howItWorksFeatureFreemiumTitle': '免费增值模式',
     'homepage.howItWorksFeatureFreemiumDesc': '求职者完全免费,雇主收费实惠——专为规模化与公平性而设计。',
+
+    'homepage.crewStory1': '设施维修技术员,4 年经验,让工业现场持续顺畅运转。',
+    'homepage.crewStory2': '综合维修专员,专门解决别人搞不定的问题。',
+    'homepage.crewStory3': '仓库与库存主管,每周扫描数千个托盘,精准无误。',
+    'homepage.crewStory4': '泥水与结构装修师傅,家族三代都从事这个行业。',
+    'homepage.crewStory5': '现场安全主任,今年零工时损失事故记录。',
+    'homepage.crewStory6': '机械维修技工,专精工业厂房机械设备。',
+    'homepage.crewStory7': '现场协调员,同时统筹三支团队的进度。',
+    'homepage.crewStory8': 'QA/QC 品检员,检查清单遗漏的地方全逃不过她的眼睛。',
+    'homepage.crewStory9': '吊装工,持有五种不同起重机操作证照。',
+    'homepage.crewStory10': '持证电工,8 年高压工业系统维修经验。',
+    'homepage.crewStory11': '物流协调员,货运出问题时第一个被找的人。',
+    'homepage.crewStory12': '现场主管,每天的晨会都安排得井井有条。',
 };
 
 export default zh;

@@ -190,6 +190,20 @@ const en = {
     'homepage.howItWorksFeatureAiDesc': 'Automated skill and credential validation to ensure authenticity.',
     'homepage.howItWorksFeatureFreemiumTitle': 'Freemium Model',
     'homepage.howItWorksFeatureFreemiumDesc': 'Free for workers, affordable for employers — designed for scale and fairness.',
+
+    // --- Crew lineup hover tooltips (illustrative personas, not real workers) ---
+    'homepage.crewStory1': 'Facilities technician, 4 years keeping industrial sites running smoothly.',
+    'homepage.crewStory2': 'General maintenance specialist, fixes what others give up on.',
+    'homepage.crewStory3': 'Warehouse & inventory lead, scans thousands of pallets a week.',
+    'homepage.crewStory4': 'Mason & structural finisher, third generation in the trade.',
+    'homepage.crewStory5': 'Site safety officer, zero lost-time incidents this year.',
+    'homepage.crewStory6': 'Mechanical fitter, specialises in industrial plant machinery.',
+    'homepage.crewStory7': 'Site coordinator, keeps three crews on schedule at once.',
+    'homepage.crewStory8': 'QA/QC inspector, catches what the checklist misses.',
+    'homepage.crewStory9': 'Rigger, certified across five different crane classes.',
+    'homepage.crewStory10': 'Licensed electrician, 8 years on high-voltage industrial systems.',
+    'homepage.crewStory11': 'Logistics coordinator, first call when a shipment goes sideways.',
+    'homepage.crewStory12': 'Site supervisor, runs the morning briefing like clockwork.',
 };
 
 export default en;
