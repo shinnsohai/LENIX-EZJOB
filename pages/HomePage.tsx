@@ -26,39 +26,7 @@ import {
     Gem,
     ArrowDown,
 } from 'lucide-react';
-
-// ---------------------------------------------------------------------------
-// Motion helpers (CSS-only, no animation library per project constraints).
-// A small IntersectionObserver hook drives scroll-reveal; it resolves
-// instantly (no animated transition) for prefers-reduced-motion so users who
-// asked for less motion never see the reveal happen.
-// ---------------------------------------------------------------------------
-function useInView<T extends HTMLElement>() {
-    const ref = useRef<T | null>(null);
-    const [inView, setInView] = useState<boolean>(() => {
-        if (typeof window === 'undefined' || !window.matchMedia) return false;
-        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    });
-
-    useEffect(() => {
-        if (inView || !ref.current) return;
-        const node = ref.current;
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setInView(true);
-                    observer.disconnect();
-                }
-            },
-            { threshold: 0.15 }
-        );
-        observer.observe(node);
-        return () => observer.disconnect();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    return { ref, inView };
-}
+import { useInView } from '../hooks/useInView';
 
 /** Fade-and-rise reveal wrapper, with a variant anchor so entrances aren't
  * identical across every section (`up` is the original, unchanged default).

@@ -32,3 +32,6 @@ skills-lock.json
 
 # Generated i18n translation exports (working files, regenerate via npm run i18n:export)
 i18n-exports/
+
+# Local scratch/reference files (e.g. content-brief drafts) — not app source
+scratch/

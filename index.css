@@ -87,6 +87,353 @@
     }
 }
 
+/* Services / Solutions illustration system — a scoped, documented exception
+   to the "one approved keyframe" rule (see design-system.md, Motion
+   section). Each scene is one AI-generated illustration split into a
+   static base layer plus one or more absolutely-positioned copies of that
+   same image, clipped via clip-path to isolate a single visual element and
+   animated independently — a "layered sprite" so a single flat raster can
+   still have one moving part. Ported from a commissioned animation bundle
+   (Codex, 2026-09-16) built to the exact 9-scene brief drafted for these
+   pages; scoped entirely to ServicesPage/SolutionsPage, never used
+   elsewhere. Reveal is driven by useInView (adds .scene-visible) for every
+   scene except 04, which mounts already visible in place of a
+   window-load trigger (04 is the only scene meant to greet the page, not
+   the scroll). */
+.layered-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    overflow: hidden;
+    border-radius: 1rem;
+    background: #f0f9ff;
+}
+
+.layer-base,
+.layer-source,
+.layer-vector,
+.layer-sprite {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.layer-base,
+.layer-source {
+    object-fit: cover;
+}
+
+.layer-vector {
+    z-index: 3;
+    pointer-events: none;
+}
+
+.layer-sprite {
+    z-index: 2;
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+.layer-blank {
+    background: #f0f9ff;
+}
+
+/* 01 — isolate and stamp the verification shield. */
+.shield-sprite {
+    clip-path: polygon(39% 57%, 48% 53%, 56% 58%, 55% 83%, 47% 89%, 40% 80%);
+    transform: scale(0.9);
+    transform-origin: 48% 71%;
+}
+
+.scene-visible .shield-sprite {
+    animation: layer-shield-stamp 400ms ease-out forwards;
+}
+
+@keyframes layer-shield-stamp {
+    0% { transform: scale(0.9); }
+    58% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* 02 — vector toggle, then four masked document cards. */
+.toggle-layer {
+    transform: translateX(0);
+}
+
+.scene-visible .toggle-layer {
+    animation: layer-toggle 200ms ease-out forwards;
+}
+
+@keyframes layer-toggle {
+    to { transform: translateX(32px); }
+}
+
+.document-card {
+    opacity: 0;
+}
+
+.document-card--1 {
+    z-index: 6;
+    clip-path: polygon(64% 47%, 73% 44%, 78% 48%, 79% 70%, 68% 74%, 66% 65%);
+    transform: translate(185px, 12px) rotate(9deg);
+    transform-origin: 71% 60%;
+}
+
+.document-card--2 {
+    z-index: 5;
+    clip-path: polygon(73% 45%, 82% 47%, 86% 53%, 84% 72%, 77% 73%, 75% 62%);
+    transform: translate(90px, 8px) rotate(5deg);
+    transform-origin: 79% 59%;
+}
+
+.document-card--3 {
+    z-index: 4;
+    clip-path: polygon(81% 47%, 90% 50%, 94% 57%, 90% 75%, 84% 72%, 83% 59%);
+    transform: translate(-15px, 3px) rotate(-2deg);
+    transform-origin: 87% 61%;
+}
+
+.document-card--4 {
+    z-index: 3;
+    clip-path: polygon(88% 52%, 96% 55%, 99% 62%, 94% 78%, 89% 72%, 90% 61%);
+    transform: translate(-115px, -4px) rotate(-7deg);
+    transform-origin: 94% 65%;
+}
+
+.scene-visible .document-card {
+    animation: layer-card-fan 360ms ease-out forwards;
+}
+
+.scene-visible .document-card--1 { animation-delay: 220ms; }
+.scene-visible .document-card--2 { animation-delay: 300ms; }
+.scene-visible .document-card--3 { animation-delay: 380ms; }
+.scene-visible .document-card--4 { animation-delay: 460ms; }
+
+@keyframes layer-card-fan {
+    to {
+        opacity: 1;
+        transform: translate(0, 0) rotate(0deg);
+    }
+}
+
+/* 03 — dotted route revealed with a dash-offset mask. */
+.route-mask {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+}
+
+.scene-visible .route-mask {
+    animation: layer-route-draw 700ms ease-out forwards;
+}
+
+@keyframes layer-route-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* 04 — load-triggered: the matched worker arrives after the scene settles. */
+.matched-worker-sprite {
+    clip-path: polygon(41% 27%, 49% 25%, 52% 34%, 52% 69%, 49% 74%, 41% 72%, 40% 42%);
+    opacity: 0;
+    transform: scale(0.86);
+    transform-origin: 46% 58%;
+}
+
+.scene-visible .matched-worker-sprite {
+    animation: layer-match-found 400ms ease-out 400ms forwards;
+}
+
+@keyframes layer-match-found {
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 05 — three independent zones rise and fade in from the same image. */
+.zone-sprite {
+    opacity: 0;
+    transform: translateY(22px);
+}
+
+.zone-sprite--1 { clip-path: inset(0 68% 0 0); }
+.zone-sprite--2 { clip-path: inset(0 40% 0 28%); }
+.zone-sprite--3 { clip-path: inset(0 0 0 58%); }
+
+.scene-visible .zone-sprite {
+    animation: layer-zone-rise 420ms ease-out forwards;
+}
+
+.scene-visible .zone-sprite--1 { animation-delay: 0ms; }
+.scene-visible .zone-sprite--2 { animation-delay: 150ms; }
+.scene-visible .zone-sprite--3 { animation-delay: 300ms; }
+
+@keyframes layer-zone-rise {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 06 — source document contracts as masked copies travel outward. */
+.source-document {
+    clip-path: inset(3% 42% 71% 42%);
+    transform-origin: 50% 15%;
+}
+
+.scene-visible .source-document {
+    animation: layer-source-shrink 300ms ease-out forwards;
+}
+
+@keyframes layer-source-shrink {
+    to { transform: scale(0.94); }
+}
+
+.split-document {
+    opacity: 0;
+}
+
+.split-document--1 {
+    clip-path: inset(34% 62% 48% 26%);
+    transform: translate(278px, -162px) rotate(3deg) scale(0.9);
+    transform-origin: 32% 43%;
+}
+
+.split-document--2 {
+    clip-path: inset(34% 44% 48% 44%);
+    transform: translate(0, -162px) scale(0.9);
+    transform-origin: 50% 43%;
+}
+
+.split-document--3 {
+    clip-path: inset(34% 26% 48% 62%);
+    transform: translate(-278px, -162px) rotate(-3deg) scale(0.9);
+    transform-origin: 68% 43%;
+}
+
+.scene-visible .split-document {
+    animation: layer-split-document 300ms ease-out forwards;
+}
+
+.scene-visible .split-document--1 { animation-delay: 0ms; }
+.scene-visible .split-document--2 { animation-delay: 60ms; }
+.scene-visible .split-document--3 { animation-delay: 120ms; }
+
+@keyframes layer-split-document {
+    to {
+        opacity: 1;
+        transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+}
+
+.split-lines {
+    opacity: 0;
+    transition: opacity 180ms ease-out 260ms;
+}
+
+.scene-visible .split-lines {
+    opacity: 1;
+}
+
+/* 07 — one clean progress sweep. */
+.verification-ring {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+}
+
+.scene-visible .verification-ring {
+    animation: layer-ring-draw 600ms ease-in-out forwards;
+}
+
+@keyframes layer-ring-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+/* 08 — four badges tick in sequentially. */
+.badge-sprite {
+    opacity: 0;
+    transform: scale(0.82);
+}
+
+.badge-sprite--1 {
+    clip-path: inset(29% 75% 39% 5%);
+    transform-origin: 15% 45%;
+}
+
+.badge-sprite--2 {
+    clip-path: inset(29% 51% 39% 29%);
+    transform-origin: 39% 45%;
+}
+
+.badge-sprite--3 {
+    clip-path: inset(29% 27% 39% 53%);
+    transform-origin: 63% 45%;
+}
+
+.badge-sprite--4 {
+    clip-path: inset(29% 4% 39% 76%);
+    transform-origin: 86% 45%;
+}
+
+.scene-visible .badge-sprite {
+    animation: layer-badge-tick 260ms ease-out forwards;
+}
+
+.scene-visible .badge-sprite--1 { animation-delay: 0ms; }
+.scene-visible .badge-sprite--2 { animation-delay: 100ms; }
+.scene-visible .badge-sprite--3 { animation-delay: 200ms; }
+.scene-visible .badge-sprite--4 { animation-delay: 300ms; }
+
+@keyframes layer-badge-tick {
+    65% {
+        opacity: 1;
+        transform: scale(1.08);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 09 — a single vector spark over the resting plate. */
+.spark-layer {
+    opacity: 0;
+    transform: scale(0);
+    transform-origin: 51% 37%;
+}
+
+.scene-visible .spark-layer {
+    animation: layer-spark 500ms ease-out forwards;
+}
+
+@keyframes layer-spark {
+    0% { opacity: 1; transform: scale(0); }
+    62% { opacity: 1; transform: scale(1.3); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shield-sprite,
+    .toggle-layer,
+    .document-card,
+    .route-mask,
+    .matched-worker-sprite,
+    .zone-sprite,
+    .source-document,
+    .split-document,
+    .verification-ring,
+    .badge-sprite,
+    .spark-layer {
+        animation-delay: 0ms !important;
+        animation-duration: 1ms !important;
+    }
+
+    .split-lines {
+        transition-delay: 0ms;
+        transition-duration: 1ms;
+    }
+}
+
 /* Print / "Export PDF" (window.print()) styles for the Skill Passport.
    A printed page is always a plain light physical sheet — there's no dark
    mode on paper — so this forces a high-contrast light-on-white palette

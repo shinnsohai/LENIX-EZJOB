@@ -25,6 +25,8 @@ const JobSearchPage = lazy(() => import('./pages/JobSearchPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AboutUsPage = lazy(() => import('./pages/AboutUsPage'));
+const ServicesPage = lazy(() => import('./pages/ServicesPage'));
+const SolutionsPage = lazy(() => import('./pages/SolutionsPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const CareersPage = lazy(() => import('./pages/CareersPage'));
 const BlogPage = lazy(() => import('./pages/BlogPage'));
@@ -92,6 +94,8 @@ function App() {
 
                                         {/* Static & Legal Pages */}
                                         <Route path="/about" element={<AboutUsPage />} />
+                                        <Route path="/services" element={<ServicesPage />} />
+                                        <Route path="/solutions" element={<SolutionsPage />} />
                                         <Route path="/contact" element={<ContactPage />} />
                                         <Route path="/careers" element={<CareersPage />} />
                                         <Route path="/blog" element={<BlogPage />} />

@@ -65,6 +65,8 @@ const Footer: React.FC = () => {
                         <h3 className="font-mono text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-4">{t('footer.platformNavigation')}</h3>
                         <ul className="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
                             <li><Link to="/jobs" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.searchAllJobs')}</Link></li>
+                            <li><Link to="/services" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.ourServices')}</Link></li>
+                            <li><Link to="/solutions" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.ourSolutions')}</Link></li>
                             {quickLinks.map(link => (
                                 <li key={link.id}>
                                     <Link to={link.url} className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{link.text}</Link>
