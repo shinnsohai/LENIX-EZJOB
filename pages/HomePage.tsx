@@ -253,46 +253,53 @@ const StatCounter: React.FC<{ target: number; suffix: string; active: boolean; c
 /** Strips a leading hyphen/en-dash/em-dash (and any surrounding whitespace) that legacy attribution strings may carry, so nothing in this file ever renders a dash as a design flourish. */
 const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
 
+/** Whether the hero's autoplaying background video should actually mount.
+ * False (poster image only, no <video> in the DOM at all — not just hidden)
+ * below the md breakpoint, so a phone on mobile data never downloads it, and
+ * false under prefers-reduced-motion. Re-evaluates live if either changes
+ * (window resize, or the OS setting toggling mid-session). */
+function useShouldPlayHeroVideo() {
+    const [shouldPlay, setShouldPlay] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !window.matchMedia) return;
+        const widthQuery = window.matchMedia('(min-width: 768px)');
+        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const update = () => setShouldPlay(widthQuery.matches && !motionQuery.matches);
+        update();
+        widthQuery.addEventListener('change', update);
+        motionQuery.addEventListener('change', update);
+        return () => {
+            widthQuery.removeEventListener('change', update);
+            motionQuery.removeEventListener('change', update);
+        };
+    }, []);
+
+    return shouldPlay;
+}
+
 const CREW_PHOTO_COUNT = 12;
 const CREW_PHOTOS = Array.from(
     { length: CREW_PHOTO_COUNT },
     (_, i) => `/assets/crew/worker-${String(i + 1).padStart(2, '0')}.webp`
 );
 
-/** Twelve verified crew members standing in a row over a background photo
- * whose edges fade into the hero's own background (a radial mask, not a
- * hard-edged box) rather than a boxed-off strip. Hovering one crew member
- * brings them forward at full clarity while every other member fades back
- * — plain React hover state per figure, not CSS :has(): tried the pure-CSS
- * version first, but this environment's Chromium build matches :has() via
- * `.matches()` without actually invalidating computed style for it (a real,
- * known class of bug in early :has() implementations), so the fade silently
- * never painted. Per-image onMouseEnter/onMouseLeave has no such ambiguity. */
+/** Twelve verified crew members standing in a row directly on the hero's own
+ * video background (no separate background photo of its own anymore — that
+ * was needed when the hero sat on a flat color; now the hero itself supplies
+ * the moving backdrop, and stacking a second photo here would just compete
+ * with it). Hovering one crew member brings them forward at full clarity
+ * while every other member fades back — plain React hover state per figure,
+ * not CSS :has(): tried the pure-CSS version first, but this environment's
+ * Chromium build matches :has() via `.matches()` without actually
+ * invalidating computed style for it (a real, known class of bug in early
+ * :has() implementations), so the fade silently never painted. Per-image
+ * onMouseEnter/onMouseLeave has no such ambiguity. */
 const CrewLineup = () => {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
     return (
-        <div className="relative h-64 sm:h-72 lg:h-80">
-            {/* Background photo, faded at every edge via a radial mask so it
-                dissolves into the hero section instead of reading as a
-                separate dark box. */}
-            <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{
-                    backgroundImage: 'url(/assets/crew/lineup-bg.webp)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 70% 75% at 50% 50%, black 50%, transparent 100%)',
-                    maskImage: 'radial-gradient(ellipse 70% 75% at 50% 50%, black 50%, transparent 100%)',
-                }}
-                aria-hidden="true"
-            />
-            {/* Gentle dark gradient so the crew cutouts stay legible standing
-                on the photo, strongest low where their boots meet the ground. */}
-            <div
-                className="absolute inset-0"
-                style={{ background: 'linear-gradient(to top, rgba(2,6,23,0.55) 0%, rgba(2,6,23,0.1) 45%, transparent 70%)' }}
-                aria-hidden="true"
-            />
-
+        <div className="relative h-56 sm:h-64 lg:h-72">
             <div
                 className="absolute inset-0 flex items-end overflow-x-auto sm:overflow-visible"
                 role="img"
@@ -327,49 +334,63 @@ const HeroSection = () => {
     const { t } = useLocale();
     const { homepageContent } = useSiteContent();
     const { ref: statsRef, inView: statsInView } = useInView<HTMLDivElement>();
-    // Two-plane depth: the ambient wallpaper is the back plane (moves against
-    // scroll direction, slower), the photo is the front plane (moves with
-    // scroll, slightly faster). Copy and CTAs ride at 1x — untouched — so
-    // nothing the visitor is reading ever moves relative to itself. Capped at
-    // a few dozen px, per parallax's "subtle or nothing" ceiling.
+    const shouldPlayVideo = useShouldPlayHeroVideo();
+    // Subtle parallax on the video layer only. Copy and CTAs ride at 1x —
+    // untouched — so nothing the visitor is reading ever moves relative to
+    // itself. Capped low, per parallax's "subtle or nothing" ceiling.
     const scrollY = useScrollY(320);
-    const backOffset = -scrollY * 0.09;
-    const frontOffset = scrollY * 0.06;
+    const videoOffset = -scrollY * 0.08;
 
     return (
-        <section className="relative w-full pt-16 sm:pt-20 pb-24 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white transition-colors duration-300">
-            {/* Ambient brand-gradient wallpaper. Decorative background only, not a
-                functional accent, so it keeps the site's established tri-color
-                brand identity (see .text-gradient-lenix in index.css) while every
-                interactive element below stays locked to a single cyan accent.
-                Back parallax plane: no transition on transform (a direct
-                per-frame write, eased transitions lag behind the scroll). */}
+        <section className="relative w-full pt-16 sm:pt-20 pb-24 px-4 sm:px-6 lg:px-8 flex items-center justify-center overflow-hidden bg-slate-950 text-white transition-colors duration-300">
+            {/* Full-bleed looping promo video. The poster (the video's own first
+                frame) covers the gap before playback starts and stands in
+                entirely below md / under prefers-reduced-motion — the <video>
+                element is never mounted there at all (see
+                useShouldPlayHeroVideo), not just visually hidden, so a phone on
+                mobile data never downloads it. No transition on transform: a
+                direct per-frame write, an eased transition would lag the scroll. */}
+            <div className="absolute inset-0 pointer-events-none" style={{ transform: `translate3d(0, ${videoOffset}px, 0)` }} aria-hidden="true">
+                <img src="/assets/hero/promo-poster.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+                {shouldPlayVideo && (
+                    <video
+                        className="absolute inset-0 w-full h-full object-cover"
+                        src="/assets/hero/promo-loop.mp4"
+                        poster="/assets/hero/promo-poster.jpg"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        preload="auto"
+                    />
+                )}
+            </div>
+
+            {/* Scrim: keeps the headline/body copy legible over moving footage
+                regardless of what's on screen at any given moment — darkest
+                where the text actually sits, easing off toward the right. */}
             <div
-                className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-20"
-                style={{
-                    backgroundImage:
-                        'radial-gradient(circle at 80% -20%, #3b82f6 0%, transparent 45%), radial-gradient(circle at 20% 120%, #d946ef 0%, transparent 45%), radial-gradient(circle at 50% 50%, #06b6d4 0%, transparent 60%)',
-                    transform: `translate3d(0, ${backOffset}px, 0)`,
-                }}
+                className="absolute inset-0 pointer-events-none bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/40"
+                aria-hidden="true"
             />
 
-            <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-12 relative z-10 items-center">
-                <div className="lg:col-span-7 flex flex-col gap-6 text-left">
+            <div className="max-w-7xl mx-auto w-full relative z-10">
+                <div className="max-w-2xl flex flex-col gap-6 text-left">
                     {/* Eyebrow badge (1 of 3 allowed on this page) */}
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-cyan-500/30 rounded-full w-fit shadow-sm">
-                        <Zap size={16} className="text-cyan-600 dark:text-cyan-400" />
-                        <span className="font-mono text-xs uppercase tracking-widest text-cyan-700 dark:text-cyan-300 font-semibold">
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full w-fit shadow-sm">
+                        <Zap size={16} className="text-cyan-300" />
+                        <span className="font-mono text-xs uppercase tracking-widest text-cyan-200 font-semibold">
                             {t('homepage.badge')}
                         </span>
                     </div>
 
                     {/* Headline: 2 lines max, single locked accent for the emphasis word */}
-                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-slate-900 dark:text-white max-w-2xl">
+                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-white max-w-2xl">
                         {t('homepage.heroHeadlinePrefix')} <span className="text-gradient-cyan-blue">{t('homepage.heroHeadlineAccent')}</span>
                     </h1>
 
                     {/* Subheadline */}
-                    <p className="text-lg text-slate-600 dark:text-slate-300 max-w-xl font-normal leading-relaxed">
+                    <p className="text-lg text-slate-200 max-w-xl font-normal leading-relaxed">
                         {homepageContent.hero.subheadline || t('homepage.heroSubheadlineFallback')}
                     </p>
 
@@ -384,23 +405,23 @@ const HeroSection = () => {
                         </button>
                         <button
                             onClick={() => navigate('/register', { state: { role: UserRole.EMPLOYER } })}
-                            className="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 hover:border-cyan-400/60 font-mono text-xs uppercase tracking-wider px-8 py-4 rounded-full transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
+                            className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/25 hover:border-cyan-300/60 font-mono text-xs uppercase tracking-wider px-8 py-4 rounded-full transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
                         >
-                            <PlusCircle size={18} className="text-cyan-600 dark:text-cyan-400" />
+                            <PlusCircle size={18} className="text-cyan-300" />
                             {t('homepage.postARole')}
                         </button>
                     </div>
 
                     {/* Quick stats: tick up once, the first time they're on screen */}
-                    <div ref={statsRef} className="grid grid-cols-3 gap-6 pt-8 mt-2 border-t border-slate-200 dark:border-slate-800/90">
+                    <div ref={statsRef} className="grid grid-cols-3 gap-6 pt-8 mt-2 border-t border-white/15">
                         <div>
                             <StatCounter
                                 target={12}
                                 suffix="k+"
                                 active={statsInView}
-                                className="block text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tabular-nums"
+                                className="block text-2xl sm:text-3xl font-bold text-white tabular-nums"
                             />
-                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="font-mono text-xs text-slate-300 uppercase tracking-wider">
                                 {t('homepage.statActiveProjects')}
                             </span>
                         </div>
@@ -409,9 +430,9 @@ const HeroSection = () => {
                                 target={98}
                                 suffix="%"
                                 active={statsInView}
-                                className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
+                                className="block text-2xl sm:text-3xl font-bold text-cyan-300 tabular-nums"
                             />
-                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="font-mono text-xs text-slate-300 uppercase tracking-wider">
                                 {t('homepage.statMatchRate')}
                             </span>
                         </div>
@@ -420,37 +441,17 @@ const HeroSection = () => {
                                 target={24}
                                 suffix="h"
                                 active={statsInView}
-                                className="block text-2xl sm:text-3xl font-bold text-cyan-600 dark:text-cyan-400 tabular-nums"
+                                className="block text-2xl sm:text-3xl font-bold text-cyan-300 tabular-nums"
                             />
-                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <span className="font-mono text-xs text-slate-300 uppercase tracking-wider">
                                 {t('homepage.statAvgPlacement')}
                             </span>
                         </div>
                     </div>
                 </div>
 
-                {/* Hero visual: a real photograph, not a fabricated dashboard preview.
-                    Front parallax plane — travels slightly faster than the page. */}
-                <div
-                    className="lg:col-span-5 relative hidden lg:block"
-                    style={{ transform: `translate3d(0, ${frontOffset}px, 0)` }}
-                >
-                    <div
-                        className="absolute -inset-6 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-transparent rounded-[2rem] blur-2xl pointer-events-none"
-                        aria-hidden="true"
-                    />
-                    <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xl">
-                        <img
-                            src="https://picsum.photos/seed/ezjob-industrial-crew/900/1100"
-                            alt="A certified skilled trades professional on an active industrial worksite"
-                            className="w-full h-full object-cover aspect-[4/5]"
-                            loading="eager"
-                        />
-                    </div>
-                </div>
-
-                {/* Crew glow lineup — full width, below both columns. */}
-                <div className="lg:col-span-12">
+                {/* Crew glow lineup — full width, standing directly on the video. */}
+                <div className="mt-14">
                     <CrewLineup />
                 </div>
             </div>
