@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getJobById, getWorkerApplications, createApplication } from '../services/db';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { getJobById, getWorkerApplications, createApplication, getWorkerProfile, saveWorkerProfile } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import Spinner from '../components/Spinner';
-import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift, Languages, Users } from 'lucide-react';
+import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift, Languages, Users, Plus, Check } from 'lucide-react';
 import { UserRole } from '../types';
-import type { Job } from '../types';
+import type { Job, WorkerProfile } from '../types';
 import { formatSalaryRange } from '../data/currencies';
 import { TRANSLATION_LANGUAGES, languageLabel } from '../data/languages';
 import { useLocale } from '../contexts/LocaleContext';
+import { flattenWorkerSkills, computeSkillMatch } from '../utils/jobMatch';
 
 export default function JobDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -22,6 +23,10 @@ export default function JobDetailPage() {
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
+    // Worker-only: powers the "Your Skill Match" panel below (see
+    // utils/jobMatch.ts for the keyword-overlap algorithm).
+    const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null);
+    const [addingSkill, setAddingSkill] = useState<string | null>(null);
     // Qualifying questions act as a lightweight screening checklist in place
     // of a cover letter — candidates confirm each one before applying.
     const [confirmedQuestions, setConfirmedQuestions] = useState<Set<number>>(new Set());
@@ -35,9 +40,11 @@ export default function JobDetailPage() {
         if (!id) return;
         setLoading(true);
         try {
-            const [jobData, applications] = await Promise.all([
+            const isWorker = user && user.role === UserRole.WORKER;
+            const [jobData, applications, profile] = await Promise.all([
                 getJobById(id),
-                user && user.role === UserRole.WORKER ? getWorkerApplications(user.id) : Promise.resolve([]),
+                isWorker ? getWorkerApplications(user!.id) : Promise.resolve([]),
+                isWorker ? getWorkerProfile(user!.id) : Promise.resolve(null),
             ]);
 
             if (jobData) {
@@ -48,6 +55,7 @@ export default function JobDetailPage() {
 
             const alreadyApplied = applications.some(app => app.job_id === id && app.status !== 'Withdrawn');
             setHasApplied(alreadyApplied);
+            setWorkerProfile(profile);
         } catch (error) {
             console.error("Error fetching job:", error);
         } finally {
@@ -90,6 +98,30 @@ export default function JobDetailPage() {
         }
     };
 
+    // Adds a missing-but-required skill as a tag under the worker's primary
+    // skill (or their first skill if none is flagged primary). Only offered
+    // once a Skill Passport already exists — a fresh upsert from this panel
+    // with just a skill tag would be missing required profile fields
+    // (full_name, trade_or_skill, etc.) and fail the DB's NOT NULL checks.
+    const handleAddSkill = async (skillName: string) => {
+        if (!user || !workerProfile || !workerProfile.skills || workerProfile.skills.length === 0) return;
+        setAddingSkill(skillName);
+        try {
+            const skills = [...workerProfile.skills];
+            const targetIndex = Math.max(0, skills.findIndex(s => s.isPrimary));
+            skills[targetIndex] = { ...skills[targetIndex], tags: { ...skills[targetIndex].tags, [skillName]: true } };
+            const updatedProfile = { ...workerProfile, skills };
+            await saveWorkerProfile(updatedProfile);
+            setWorkerProfile(updatedProfile);
+            showToast(t('jobDetail.skillAdded', { skill: skillName }), 'success');
+        } catch (error) {
+            console.error('Error adding skill:', error);
+            showToast(t('jobDetail.skillAddFailed'), 'error');
+        } finally {
+            setAddingSkill(null);
+        }
+    };
+
     const toggleQuestion = (index: number) => {
         setConfirmedQuestions(prev => {
             const next = new Set(prev);
@@ -114,6 +146,11 @@ export default function JobDetailPage() {
 
     const questions = displayJob?.qualifying_questions ?? [];
     const allQuestionsConfirmed = questions.length === 0 || confirmedQuestions.size === questions.length;
+
+    const isWorkerViewer = user?.role === UserRole.WORKER;
+    const skillMatch = isWorkerViewer
+        ? computeSkillMatch(displayJob?.required_skills, flattenWorkerSkills(workerProfile))
+        : null;
 
     const whatsappHref = job?.whatsapp_number
         ? `https://wa.me/${job.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
@@ -314,18 +351,85 @@ export default function JobDetailPage() {
                     </div>
                 </div>
 
+                {/* Skill Match — worker-only "how well am I positioned" illustration.
+                    See utils/jobMatch.ts for the keyword-overlap algorithm behind it. */}
+                {isWorkerViewer && skillMatch && (
+                    <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
+                        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                            <h2 className="text-2xl font-bold text-slate-900">{t('jobDetail.skillMatchTitle')}</h2>
+                            <span className={`text-sm font-bold font-mono ${
+                                skillMatch.percent >= 70 ? 'text-emerald-600' : skillMatch.percent >= 40 ? 'text-amber-600' : 'text-slate-500'
+                            }`}>
+                                {t('jobDetail.skillMatchPercent', { percent: skillMatch.percent })}
+                            </span>
+                        </div>
+
+                        <div className="flex gap-1.5 mb-6" role="progressbar" aria-valuenow={skillMatch.percent} aria-valuemin={0} aria-valuemax={100}>
+                            {Array.from({ length: 10 }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                        i < Math.round(skillMatch.percent / 10) ? 'bg-emerald-500' : 'bg-slate-200'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+
+                        {skillMatch.missing.length === 0 ? (
+                            <p className="text-emerald-700 font-medium flex items-center gap-2">
+                                <Check size={18} /> {t('jobDetail.allSkillsMatched')}
+                            </p>
+                        ) : (
+                            <>
+                                <p className="text-sm font-semibold text-slate-700 mb-3">{t('jobDetail.addTheseSkills')}</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {skillMatch.missing.map(skill => (
+                                        <button
+                                            key={skill}
+                                            type="button"
+                                            onClick={() => handleAddSkill(skill)}
+                                            disabled={!workerProfile?.skills?.length || addingSkill === skill}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border-2 border-emerald-300 text-emerald-700 font-medium text-sm hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                        >
+                                            <Plus size={14} className={addingSkill === skill ? 'animate-spin' : ''} />
+                                            {skill}
+                                        </button>
+                                    ))}
+                                </div>
+                                {!workerProfile?.skills?.length && (
+                                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm flex items-center justify-between gap-3 flex-wrap">
+                                        <span>{t('jobDetail.buildPassportPrompt')}</span>
+                                        <Link to="/worker/dashboard" className="font-bold whitespace-nowrap hover:underline">
+                                            {t('jobDetail.buildPassportCta')}
+                                        </Link>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {/* Required Skills */}
                 <div className="bg-white rounded-xl shadow-lg p-8">
                     <h2 className="text-2xl font-bold text-slate-900 mb-4">{t('jobDetail.requiredSkills')}</h2>
                     <div className="flex flex-wrap gap-3">
-                        {(displayJob.required_skills ?? []).map((skill, index) => (
+                        {(displayJob.required_skills ?? []).map((skill, index) => {
+                            const isMatched = skillMatch?.matched.includes(skill);
+                            const isMissing = skillMatch?.missing.includes(skill);
+                            return (
                             <span
                                 key={index}
-                                className="px-4 py-2 bg-emerald-100 text-emerald-800 rounded-full font-medium"
+                                className={`px-4 py-2 rounded-full font-medium flex items-center gap-1.5 ${
+                                    isMissing
+                                        ? 'bg-slate-100 text-slate-600 border border-slate-300'
+                                        : 'bg-emerald-100 text-emerald-800'
+                                }`}
                             >
+                                {isMatched && <Check size={14} />}
                                 {skill}
                             </span>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 

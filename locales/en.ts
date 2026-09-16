@@ -57,6 +57,7 @@ const en = {
     'jobSearch.searchPlaceholder': 'Search by trade title, company, location, or skill...',
     'jobSearch.newestFirst': 'Newest First',
     'jobSearch.oldestFirst': 'Oldest First',
+    'jobSearch.bestMatch': 'Best Match',
     'jobSearch.showingCount': 'Showing {count} active requisitions',
     'jobSearch.clearSearch': 'Clear Search',
     'jobSearch.loading': 'Querying LENIX Match Engine...',
@@ -110,6 +111,15 @@ const en = {
     'jobDetail.jobDescription': 'Job Description',
     'jobDetail.requiredSkills': 'Required Skills',
     'jobDetail.applyFailed': 'Failed to submit application. Please try again.',
+    'jobDetail.skillMatchTitle': 'Your Skill Match',
+    'jobDetail.skillMatchPercent': '{percent}% skills matched',
+    'jobDetail.addTheseSkills': 'Add these skills if you have them',
+    'jobDetail.allSkillsMatched': "You've matched every required skill for this role.",
+    'jobDetail.skillAdded': '"{skill}" added to your Skill Passport.',
+    'jobDetail.skillAddFailed': 'Could not add that skill. Please try again.',
+    'jobDetail.buildPassportPrompt': 'Build your Skill Passport to see how well you match this role — and let employers find you.',
+    'jobDetail.buildPassportCta': 'Build Skill Passport →',
+    'jobDetail.matchBadge': '{percent}% match',
 
     // --- HomePage ---
     'homepage.badge': 'Accelerated Hiring Engine',

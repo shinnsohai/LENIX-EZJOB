@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import type { Job } from '../types';
-import { getJobs, getWorkerApplications, createApplication } from '../services/db';
+import { getJobs, getWorkerApplications, createApplication, getWorkerProfile } from '../services/db';
 import Spinner from '../components/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
-import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home, Users, LayoutGrid, Hand, X, Heart } from 'lucide-react';
+import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home, Users, LayoutGrid, Hand, X, Heart, Target } from 'lucide-react';
 import { formatSalaryRange } from '../data/currencies';
 import { useLocale } from '../contexts/LocaleContext';
 import type { UIStrings } from '../locales';
+import { rankJobsByMatch, type SkillMatchResult } from '../utils/jobMatch';
 
 // Category filtering matches against the job's English title/description/
 // skills regardless of display locale — job content itself isn't
@@ -31,7 +32,8 @@ const JobCard: React.FC<{
     onViewJob: (jobId: string) => void;
     onViewCompany: (employerId: string) => void;
     index: number;
-}> = ({ job, onApply, isApplying, hasApplied, onViewJob, onViewCompany, index }) => {
+    matchPercent?: number;
+}> = ({ job, onApply, isApplying, hasApplied, onViewJob, onViewCompany, index, matchPercent }) => {
     const { t } = useLocale();
     // Dynamic border color styling based on index or urgency
     const accentBorder = index % 3 === 0
@@ -50,21 +52,36 @@ const JobCard: React.FC<{
 
     return (
         <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 border-l-4 ${accentBorder} shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden ${hasApplied ? 'opacity-90 ring-1 ring-emerald-400' : ''}`}>
-            <div 
-                onClick={() => onViewJob(job.id)} 
+            <div
+                onClick={() => onViewJob(job.id)}
                 className="p-6 flex-grow cursor-pointer"
             >
                 {/* Top Badge & Company */}
                 <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${badgeStyle}`}>
-                        {badgeLabel}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${badgeStyle}`}>
+                            {badgeLabel}
+                        </span>
+                        {matchPercent !== undefined && (
+                            <span
+                                className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border flex items-center gap-1 flex-shrink-0 ${
+                                    matchPercent >= 70
+                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
+                                        : matchPercent >= 40
+                                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+                                            : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                                }`}
+                            >
+                                <Target size={11} /> {t('jobDetail.matchBadge', { percent: matchPercent })}
+                            </span>
+                        )}
+                    </div>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             onViewCompany(job.employer_id);
                         }}
-                        className="text-xs font-mono text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 truncate max-w-[160px]"
+                        className="text-xs font-mono text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 truncate max-w-[160px] flex-shrink-0"
                     >
                         <Building2 size={13} />
                         <span className="truncate">{job.employer_name}</span>
@@ -187,6 +204,9 @@ const JobCard: React.FC<{
 // spring-back / fly-away motion — no animation library, per design-system.md.
 // ---------------------------------------------------------------------------
 const SWIPE_THRESHOLD = 110;
+// Below this much horizontal movement, a pointerdown->pointerup is treated
+// as a tap (opens the job detail page) rather than an aborted drag.
+const TAP_THRESHOLD = 6;
 
 export interface SwipeCardHandle {
     swipe: (direction: 'left' | 'right') => void;
@@ -196,8 +216,10 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
     job: Job;
     isTop: boolean;
     depth: number;
+    matchPercent?: number;
     onSettled: (direction: 'left' | 'right', job: Job) => void;
-}>(({ job, isTop, depth, onSettled }, ref) => {
+    onViewJob: (jobId: string) => void;
+}>(({ job, isTop, depth, matchPercent, onSettled, onViewJob }, ref) => {
     const { t } = useLocale();
     const [dragX, setDragX] = useState(0);
     const [dragging, setDragging] = useState(false);
@@ -234,6 +256,9 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
         setDragging(false);
         if (Math.abs(dragX) > SWIPE_THRESHOLD) {
             commitSwipe(dragX > 0 ? 'right' : 'left');
+        } else if (Math.abs(dragX) < TAP_THRESHOLD) {
+            setDragX(0);
+            onViewJob(job.id);
         } else {
             setDragX(0);
         }
@@ -286,9 +311,24 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
                 </div>
 
                 <div className="p-6 sm:p-7 flex-grow overflow-y-auto">
-                    <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 dark:text-slate-400 mb-3">
-                        <Building2 size={13} />
-                        <span className="truncate">{job.employer_name}</span>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-1.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+                            <Building2 size={13} />
+                            <span className="truncate">{job.employer_name}</span>
+                        </div>
+                        {matchPercent !== undefined && (
+                            <span
+                                className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border flex items-center gap-1 flex-shrink-0 ${
+                                    matchPercent >= 70
+                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
+                                        : matchPercent >= 40
+                                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+                                            : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                                }`}
+                            >
+                                <Target size={11} /> {t('jobDetail.matchBadge', { percent: matchPercent })}
+                            </span>
+                        )}
                     </div>
                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white leading-tight mb-3">
                         {job.title}
@@ -334,8 +374,10 @@ SwipeJobCard.displayName = 'SwipeJobCard';
 const SwipeJobDeck: React.FC<{
     jobs: Job[];
     onApply: (job: Job) => void;
+    onViewJob: (jobId: string) => void;
     onSwitchToList: () => void;
-}> = ({ jobs, onApply, onSwitchToList }) => {
+    jobMatches?: Map<string, SkillMatchResult>;
+}> = ({ jobs, onApply, onViewJob, onSwitchToList, jobMatches }) => {
     const { t } = useLocale();
     const [queue, setQueue] = useState<Job[]>(jobs);
     const topCardRef = useRef<SwipeCardHandle>(null);
@@ -374,7 +416,9 @@ const SwipeJobDeck: React.FC<{
                             job={job}
                             isTop={i === 0}
                             depth={i}
+                            matchPercent={jobMatches?.get(job.id)?.percent}
                             onSettled={handleSettled}
+                            onViewJob={onViewJob}
                             ref={i === 0 ? topCardRef : undefined}
                         />
                     ))
@@ -429,22 +473,27 @@ const JobSearchPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('All Roles');
-    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'match'>('newest');
     const [applyingId, setApplyingId] = useState<string | null>(null);
     const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'swipe'>('list');
+    // Illustrates "how well am I positioned" per job — see utils/jobMatch.ts.
+    const [jobMatches, setJobMatches] = useState<Map<string, SkillMatchResult>>(new Map());
 
     const fetchJobs = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [activeJobs, userApplications] = await Promise.all([
+            const isWorker = user && user.role === UserRole.WORKER;
+            const [activeJobs, userApplications, workerProfile] = await Promise.all([
                 getJobs(),
-                user && user.role === UserRole.WORKER ? getWorkerApplications(user.id) : Promise.resolve([])
+                isWorker ? getWorkerApplications(user!.id) : Promise.resolve([]),
+                isWorker ? getWorkerProfile(user!.id) : Promise.resolve(null),
             ]);
 
             setJobs(activeJobs);
             setFilteredJobs(activeJobs);
+            setJobMatches(isWorker ? rankJobsByMatch(activeJobs, workerProfile) : new Map());
 
             const activeApplicationIds = new Set(
                 userApplications
@@ -489,15 +538,19 @@ const JobSearchPage: React.FC = () => {
             );
         }
 
-        // Sort by date
-        filtered.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-        });
+        // Sort
+        if (sortOrder === 'match') {
+            filtered.sort((a, b) => (jobMatches.get(b.id)?.percent ?? 0) - (jobMatches.get(a.id)?.percent ?? 0));
+        } else {
+            filtered.sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+            });
+        }
 
         setFilteredJobs(filtered);
-    }, [jobs, searchTerm, selectedCategory, sortOrder]);
+    }, [jobs, searchTerm, selectedCategory, sortOrder, jobMatches]);
 
     const handleApply = async (job: Job) => {
         if (!user) {
@@ -534,6 +587,8 @@ const JobSearchPage: React.FC = () => {
     const handleViewCompany = (employerId: string) => {
         navigate(`/employer/profile/${employerId}`);
     };
+
+    const canSortByMatch = user?.role === UserRole.WORKER && jobMatches.size > 0;
 
     return (
         <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 py-10 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
@@ -578,11 +633,17 @@ const JobSearchPage: React.FC = () => {
                         </div>
 
                         <button
-                            onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
+                            onClick={() => setSortOrder(prev => {
+                                if (prev === 'newest') return 'oldest';
+                                if (prev === 'oldest') return canSortByMatch ? 'match' : 'newest';
+                                return 'newest';
+                            })}
                             className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-slate-600 text-white rounded-full font-mono text-xs uppercase tracking-wider transition-colors whitespace-nowrap cursor-pointer"
                         >
-                            <ArrowUpDown size={15} className="text-cyan-400" />
-                            <span>{sortOrder === 'newest' ? t('jobSearch.newestFirst') : t('jobSearch.oldestFirst')}</span>
+                            {sortOrder === 'match' ? <Target size={15} className="text-cyan-400" /> : <ArrowUpDown size={15} className="text-cyan-400" />}
+                            <span>
+                                {sortOrder === 'newest' ? t('jobSearch.newestFirst') : sortOrder === 'oldest' ? t('jobSearch.oldestFirst') : t('jobSearch.bestMatch')}
+                            </span>
                         </button>
                     </div>
 
@@ -662,6 +723,7 @@ const JobSearchPage: React.FC = () => {
                                     onViewCompany={handleViewCompany}
                                     isApplying={applyingId === job.id}
                                     hasApplied={appliedJobIds.has(job.id)}
+                                    matchPercent={jobMatches.get(job.id)?.percent}
                                 />
                             ))}
                         </div>
@@ -669,7 +731,9 @@ const JobSearchPage: React.FC = () => {
                         <SwipeJobDeck
                             jobs={filteredJobs.filter(job => !appliedJobIds.has(job.id))}
                             onApply={handleApply}
+                            onViewJob={handleViewJob}
                             onSwitchToList={() => setViewMode('list')}
+                            jobMatches={jobMatches}
                         />
                     )
                 ) : (
