@@ -56,14 +56,14 @@ const Header: React.FC = () => {
             to="/"
             className="flex items-center select-none py-1.5 px-3 rounded-2xl bg-gradient-to-r from-slate-50/80 via-white/90 to-slate-50/80 dark:from-slate-900/80 dark:via-slate-950/90 dark:to-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-sm hover:shadow-md dark:shadow-cyan-500/5 hover:border-cyan-500/40 hover:scale-[1.03] active:scale-95 transition-all duration-300"
         >
-            <img src={ezjobLogoSrc} alt="EZJOB" className="h-9 sm:h-10 md:h-11 w-auto object-contain" />
+            <img src={ezjobLogoSrc} alt="EZJOB" className="h-12 sm:h-14 md:h-16 w-auto object-contain" />
         </Link>
     );
 
     return (
         <header className="sticky top-0 z-50 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-300">
             <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between min-h-[92px] py-2 sm:py-3">
+                <div className="flex items-center justify-between min-h-[100px] py-2 sm:py-3">
                     <div className="flex items-center">
                         <Logo />
                     </div>

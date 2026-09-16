@@ -10,6 +10,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { LocaleProvider, useLocale } from './contexts/LocaleContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import ScrollToTop from './components/ScrollToTop';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
 import Spinner from './components/Spinner';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -84,6 +85,7 @@ function App() {
                 <AuthProvider>
                     <SiteContentProvider>
                         <BrowserRouter>
+                            <ScrollToTop />
                             <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
                                 <Header />
                                 <main className="flex-grow">

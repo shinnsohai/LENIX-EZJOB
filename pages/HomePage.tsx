@@ -223,23 +223,25 @@ const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
 
 /** Whether the hero's autoplaying background video should actually mount.
  * False (poster image only, no <video> in the DOM at all — not just hidden)
- * below the md breakpoint, so a phone on mobile data never downloads it, and
- * false under prefers-reduced-motion. Re-evaluates live if either changes
- * (window resize, or the OS setting toggling mid-session). */
+ * under prefers-reduced-motion, or when the browser's own Data Saver mode
+ * (navigator.connection.saveData) is on — a real, user-expressed "don't
+ * download extra video" preference, unlike guessing from viewport width.
+ * Plays on every screen size otherwise, phones included. Re-evaluates live
+ * if either signal changes (OS setting or Data Saver toggling mid-session). */
 function useShouldPlayHeroVideo() {
     const [shouldPlay, setShouldPlay] = useState(false);
 
     useEffect(() => {
         if (typeof window === 'undefined' || !window.matchMedia) return;
-        const widthQuery = window.matchMedia('(min-width: 768px)');
         const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const update = () => setShouldPlay(widthQuery.matches && !motionQuery.matches);
+        const connection = (navigator as any).connection;
+        const update = () => setShouldPlay(!motionQuery.matches && !(connection && connection.saveData));
         update();
-        widthQuery.addEventListener('change', update);
         motionQuery.addEventListener('change', update);
+        connection?.addEventListener?.('change', update);
         return () => {
-            widthQuery.removeEventListener('change', update);
             motionQuery.removeEventListener('change', update);
+            connection?.removeEventListener?.('change', update);
         };
     }, []);
 
@@ -364,13 +366,14 @@ const HeroSection = () => {
 
     return (
         <section className="relative w-full min-h-[620px] sm:min-h-[680px] lg:min-h-[780px] pt-24 sm:pt-28 pb-8 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden bg-slate-950 text-white transition-colors duration-300">
-            {/* Full-bleed looping promo video. The poster (the video's own first
-                frame) covers the gap before playback starts and stands in
-                entirely below md / under prefers-reduced-motion — the <video>
+            {/* Full-bleed looping promo video, plays on every screen size
+                (mobile included). The poster (the video's own first frame)
+                covers the gap before playback starts and stands in entirely
+                under prefers-reduced-motion or Data Saver mode — the <video>
                 element is never mounted there at all (see
-                useShouldPlayHeroVideo), not just visually hidden, so a phone on
-                mobile data never downloads it. No transition on transform: a
-                direct per-frame write, an eased transition would lag the scroll. */}
+                useShouldPlayHeroVideo), not just visually hidden. No
+                transition on transform: a direct per-frame write, an eased
+                transition would lag the scroll. */}
             <div className="absolute inset-0 pointer-events-none" style={{ transform: `translate3d(0, ${videoOffset}px, 0)` }} aria-hidden="true">
                 <img src="/assets/hero/promo-poster.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
                 {shouldPlayVideo && (

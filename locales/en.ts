@@ -83,6 +83,17 @@ const en = {
     'jobSearch.notifyEmployerCannotApply': 'Employer accounts cannot apply for jobs.',
     'jobSearch.notifySuccess': 'Application submitted successfully with verified Skill Passport!',
     'jobSearch.notifyFailure': 'Failed to apply. Please try again.',
+    'jobSearch.viewList': 'List',
+    'jobSearch.viewSwipe': 'Swipe',
+    'jobSearch.swipeInstructions': 'Swipe right to apply, left to skip — or use the buttons below.',
+    'jobSearch.swipeApplyLabel': 'Apply',
+    'jobSearch.swipeSkipLabel': 'Skip',
+    'jobSearch.swipeSkipAria': 'Skip this job',
+    'jobSearch.swipeApplyAria': 'Apply to this job',
+    'jobSearch.swipeRemaining': '{count} roles left',
+    'jobSearch.swipeEmptyTitle': "You're all caught up!",
+    'jobSearch.swipeEmptyBody': 'No more roles to review right now. Switch to list view to browse everything again.',
+    'jobSearch.swipeBackToList': 'Back to List View',
 
     // --- JobDetailPage ---
     'jobDetail.jobNotFound': 'Job Not Found',
