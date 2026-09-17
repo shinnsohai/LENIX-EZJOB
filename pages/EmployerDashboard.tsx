@@ -370,7 +370,10 @@ const APPLICANT_STATUS_STYLE: Record<string, { bar: string; label: string }> = {
  * own legend, so there's no separate legend box for a single-series chart
  * like this. Track is a full pill; the fill is square at the baseline (left)
  * and rounded only at the data end (right), per the usual bar-chart mark spec. */
-const ApplicantStatusChart: React.FC<{ counts: { status: Application['status']; count: number }[] }> = ({ counts }) => {
+const ApplicantStatusChart: React.FC<{
+    counts: { status: Application['status']; count: number }[];
+    onStatusClick?: (status: Application['status']) => void;
+}> = ({ counts, onStatusClick }) => {
     const max = Math.max(1, ...counts.map(c => c.count));
     const total = counts.reduce((sum, c) => sum + c.count, 0);
 
@@ -386,13 +389,20 @@ const ApplicantStatusChart: React.FC<{ counts: { status: Application['status']; 
     return (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
             <h3 className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Applicant Pipeline</h3>
-            <p className="text-xs text-slate-400 mb-5">{total} total applicant{total === 1 ? '' : 's'} across all requisitions</p>
+            <p className="text-xs text-slate-400 mb-5">{total} total applicant{total === 1 ? '' : 's'} across all requisitions — click a status to drill into jobs</p>
             <div className="space-y-3">
                 {counts.map(({ status, count }) => {
                     const style = APPLICANT_STATUS_STYLE[status] ?? APPLICANT_STATUS_STYLE.Submitted;
                     const widthPct = count > 0 ? Math.max((count / max) * 100, 4) : 0;
                     return (
-                        <div key={status} className="flex items-center gap-3" title={`${status}: ${count}`}>
+                        <button
+                            key={status}
+                            type="button"
+                            onClick={() => count > 0 && onStatusClick?.(status)}
+                            disabled={count === 0}
+                            className={`w-full flex items-center gap-3 text-left rounded-lg -mx-1 px-1 py-0.5 transition-colors ${count > 0 ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'}`}
+                            title={`${status}: ${count}${count > 0 ? ' — view by job' : ''}`}
+                        >
                             <span className={`w-20 flex-shrink-0 text-xs font-mono font-semibold ${style.label}`}>{status}</span>
                             <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
                                 {count > 0 && (
@@ -403,7 +413,7 @@ const ApplicantStatusChart: React.FC<{ counts: { status: Application['status']; 
                                 )}
                             </div>
                             <span className="w-8 flex-shrink-0 text-right text-xs font-mono font-bold text-slate-700">{count}</span>
-                        </div>
+                        </button>
                     );
                 })}
             </div>
@@ -463,6 +473,86 @@ const ApplicationsTrendChart: React.FC<{ daily: { date: Date; count: number }[] 
     );
 };
 
+const HEATMAP_WEEKS = 12;
+// Sequential single-hue ramp (light -> dark), monotonic lightness — see the
+// dataviz skill's marks-and-anatomy.md "sequential = one hue" rule. The
+// categorical CVD-separation checks in validate_palette.js don't apply to a
+// sequential ramp (only lightness monotonicity does, which this satisfies).
+const HEATMAP_BUCKET_STYLE = ['bg-slate-100', 'bg-cyan-200', 'bg-cyan-400', 'bg-cyan-600', 'bg-cyan-800'];
+const heatmapBucket = (count: number, max: number): number => {
+    if (count === 0) return 0;
+    if (max <= 1) return 1;
+    const ratio = count / max;
+    if (ratio <= 0.25) return 1;
+    if (ratio <= 0.5) return 2;
+    if (ratio <= 0.75) return 3;
+    return 4;
+};
+
+/** GitHub-style calendar heatmap of applications received per day over the
+ * trailing HEATMAP_WEEKS weeks — real data bucketed client-side from
+ * applicationsSummary, same toLocalDayKey convention as the trend chart (see
+ * its comment on the timezone bug this avoids). Hover shows a native-title
+ * tooltip per cell, matching the hover convention already used by the other
+ * two charts on this dashboard. */
+const ApplicationsHeatmap: React.FC<{ weeks: { date: Date; count: number }[][] }> = ({ weeks }) => {
+    const allDays = weeks.flat();
+    const total = allDays.reduce((sum, d) => sum + d.count, 0);
+    const max = Math.max(1, ...allDays.map(d => d.count));
+    const activeDays = allDays.filter(d => d.count > 0).length;
+
+    const monthLabels = weeks.map((week, i) => {
+        const firstOfMonth = week.find(d => d.date.getDate() === 1);
+        if (!firstOfMonth) return null;
+        if (i === 0) return null; // avoid a truncated label on the very first column
+        return firstOfMonth.date.toLocaleDateString(undefined, { month: 'short' });
+    });
+
+    return (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 mb-5">
+                <div>
+                    <h3 className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Application Activity</h3>
+                    <p className="text-xs text-slate-400">{total} application{total === 1 ? '' : 's'} across {activeDays} active day{activeDays === 1 ? '' : 's'} — last {HEATMAP_WEEKS} weeks</p>
+                </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="flex flex-col justify-between text-[9px] font-mono text-slate-400 pt-4 pr-1 flex-shrink-0">
+                    <span>Mon</span>
+                    <span>Wed</span>
+                    <span>Fri</span>
+                </div>
+                <div className="flex gap-1">
+                    {weeks.map((week, wi) => (
+                        <div key={wi} className="flex flex-col gap-1">
+                            <span className="block h-3 text-[9px] font-mono text-slate-400 leading-3 whitespace-nowrap">{monthLabels[wi] ?? ''}</span>
+                            {week.map((d, di) => {
+                                const bucket = heatmapBucket(d.count, max);
+                                return (
+                                    <div
+                                        key={di}
+                                        title={`${d.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}: ${d.count} application${d.count === 1 ? '' : 's'}`}
+                                        className={`h-3 w-3 rounded-sm ${HEATMAP_BUCKET_STYLE[bucket]} hover:ring-2 hover:ring-cyan-400 transition-all`}
+                                    />
+                                );
+                            })}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-1.5 mt-4 text-[10px] font-mono text-slate-400">
+                <span>Less</span>
+                {HEATMAP_BUCKET_STYLE.map((cls, i) => (
+                    <div key={i} className={`h-3 w-3 rounded-sm ${cls}`} />
+                ))}
+                <span>More</span>
+            </div>
+        </div>
+    );
+};
+
 const EmployerDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -482,6 +572,10 @@ const EmployerDashboard: React.FC = () => {
     const [selectedJob, setSelectedJob] = useState<Job | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    // Applicant Pipeline drill-down: Status -> Jobs (modal) -> Applicants
+    // (the existing per-job Applicants view, pre-filtered to this status).
+    const [pipelineDrilldownStatus, setPipelineDrilldownStatus] = useState<Application['status'] | null>(null);
+    const [applicantsStatusFilter, setApplicantsStatusFilter] = useState<Application['status'] | null>(null);
 
     // Controlled state for the New/Edit Job form (replaces the old
     // document.getElementById reads used by the AI-generate flow).
@@ -795,10 +889,11 @@ const EmployerDashboard: React.FC = () => {
         setView('EDIT_JOB');
     };
 
-    const fetchAndShowApplicants = useCallback(async (job: Job) => {
+    const fetchAndShowApplicants = useCallback(async (job: Job, statusFilter: Application['status'] | null = null) => {
         setIsLoading(true);
         setView('APPLICANTS');
         setSelectedJob(job);
+        setApplicantsStatusFilter(statusFilter);
         try {
             const applicants = await getJobApplicants(job.id);
             const meta = new Map<string, { applicationId: string; status: Application['status'] }>();
@@ -1649,6 +1744,41 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
         return { date, count };
     });
 
+    // Calendar heatmap grid: HEATMAP_WEEKS full weeks (Sun-Sat columns),
+    // ending on the most recent Saturday on/after today, so every column is
+    // a complete week (matches the GitHub-style contribution graph this is
+    // modeled on). Same toLocalDayKey bucketing as dailyTrend above.
+    const heatmapWeeks = (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endOfWeek = new Date(today);
+        endOfWeek.setDate(today.getDate() + (6 - today.getDay())); // upcoming Saturday
+        const totalDays = HEATMAP_WEEKS * 7;
+        const days = Array.from({ length: totalDays }, (_, i) => {
+            const date = new Date(endOfWeek);
+            date.setDate(endOfWeek.getDate() - (totalDays - 1 - i));
+            const dayKey = toLocalDayKey(date);
+            const count = applicationsSummary.filter(a => a.appliedAt && toLocalDayKey(new Date(a.appliedAt)) === dayKey).length;
+            return { date, count };
+        });
+        const weeks: { date: Date; count: number }[][] = [];
+        for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+        return weeks;
+    })();
+
+    // Jobs breakdown for the Applicant Pipeline drill-down modal (Status ->
+    // Jobs -> Applicants). Only computed when a status row has been clicked.
+    const drilldownJobBreakdown = pipelineDrilldownStatus
+        ? Array.from(
+              applicationsSummary
+                  .filter(a => a.status === pipelineDrilldownStatus)
+                  .reduce((map, a) => map.set(a.job_id, (map.get(a.job_id) ?? 0) + 1), new Map<string, number>())
+          )
+              .map(([jobId, count]) => ({ job: jobsById.get(jobId), count }))
+              .filter((row): row is { job: Job; count: number } => !!row.job)
+              .sort((a, b) => b.count - a.count)
+        : [];
+
     const renderContent = () => {
         switch (view) {
             case 'NEW_JOB':
@@ -1840,17 +1970,31 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                         </div>
                     </div>
                 );
-            case 'APPLICANTS':
+            case 'APPLICANTS': {
+                const visibleWorkers = applicantsStatusFilter
+                    ? workers.filter(w => applicantMeta.get(w.user_id)?.status === applicantsStatusFilter)
+                    : workers;
                 return (
                     <div>
-                        <button onClick={() => { setView('DASHBOARD'); setWorkers([]); }} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-4">Applicants for {selectedJob?.title}</h2>
+                        <button onClick={() => { setView('DASHBOARD'); setWorkers([]); setApplicantsStatusFilter(null); }} className="mb-6 text-sm font-medium text-emerald-600 hover:text-emerald-500">&larr; Back to Dashboard</button>
+                        <div className="flex flex-wrap items-center gap-2 mb-4">
+                            <h2 className="text-2xl font-bold text-gray-900">Applicants for {selectedJob?.title}</h2>
+                            {applicantsStatusFilter && (
+                                <button
+                                    onClick={() => setApplicantsStatusFilter(null)}
+                                    className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full ${APPLICANT_STATUS_STYLE[applicantsStatusFilter]?.bar ?? 'bg-slate-400'} text-white hover:opacity-90 transition-opacity`}
+                                    title="Clear filter"
+                                >
+                                    {applicantsStatusFilter} <span aria-hidden="true">&times;</span>
+                                </button>
+                            )}
+                        </div>
                         {isLoading ? (
                             <div className="text-center py-10"><Spinner size="lg" /><p className="mt-2 text-gray-500">Finding applicants...</p></div>
-        ) : workers.length === 0 ? (<p className="text-gray-500">No applicants found for this job.</p>) : (
+        ) : visibleWorkers.length === 0 ? (<p className="text-gray-500">{applicantsStatusFilter ? `No ${applicantsStatusFilter.toLowerCase()} applicants for this job.` : 'No applicants found for this job.'}</p>) : (
                             <div>
                                 <div className="space-y-4">
-                                    {workers.map(app => {
+                                    {visibleWorkers.map(app => {
                                         const meta = applicantMeta.get(app.user_id);
                                         const isShortlisted = meta?.status === 'Shortlisted';
                                         const isHired = meta?.status === 'Hired';
@@ -1952,6 +2096,7 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                         )}
                     </div>
                 );
+            }
             case 'DASHBOARD':
             default:
                 return (
@@ -2076,8 +2221,10 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                             EmployerDashboard). */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <ApplicationsTrendChart daily={dailyTrend} />
-                            <ApplicantStatusChart counts={statusCounts} />
+                            <ApplicantStatusChart counts={statusCounts} onStatusClick={setPipelineDrilldownStatus} />
                         </div>
+
+                        <ApplicationsHeatmap weeks={heatmapWeeks} />
 
                         {/* AI Job Studio Promo Banner */}
                         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-7 rounded-3xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl">
@@ -2137,6 +2284,54 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
     return (
         <>
             {renderContent()}
+
+            {/* Applicant Pipeline drill-down: Status -> Jobs -> Applicants */}
+            {pipelineDrilldownStatus && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setPipelineDrilldownStatus(null)}>
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="pipeline-drilldown-title"
+                        className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-1">
+                                <h2 id="pipeline-drilldown-title" className="text-xl font-bold text-gray-900">
+                                    {pipelineDrilldownStatus} applicants
+                                </h2>
+                                <button
+                                    onClick={() => setPipelineDrilldownStatus(null)}
+                                    aria-label="Close dialog"
+                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-500 mb-4">By requisition — select one to view those applicants.</p>
+                            {drilldownJobBreakdown.length === 0 ? (
+                                <p className="text-sm text-gray-500 py-4">No {pipelineDrilldownStatus.toLowerCase()} applicants right now.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {drilldownJobBreakdown.map(({ job, count }) => (
+                                        <button
+                                            key={job.id}
+                                            onClick={() => {
+                                                setPipelineDrilldownStatus(null);
+                                                fetchAndShowApplicants(job, pipelineDrilldownStatus);
+                                            }}
+                                            className="w-full flex items-center justify-between gap-3 text-left bg-gray-50 hover:bg-gray-100 rounded-md px-4 py-3 transition-colors"
+                                        >
+                                            <span className="font-semibold text-gray-800 text-sm">{job.title}</span>
+                                            <span className="flex-shrink-0 text-xs font-mono font-bold bg-white border border-gray-200 text-gray-700 px-2 py-0.5 rounded-full">{count}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* CSV Import Modal */}
             {showCsvModal && (

@@ -9,6 +9,7 @@ import type {
     Reference,
     BlogPost,
     UserSkill,
+    Notification,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -338,6 +339,15 @@ export const createApplication = async (job: Job, workerId: string): Promise<tru
         location: job.location,
     });
     if (error) throw error;
+
+    createNotification({
+        user_id: job.employer_id,
+        type: 'new_applicant',
+        title: 'New applicant',
+        body: `A candidate applied to "${job.title}".`,
+        link: '/employer/dashboard',
+    }).catch((err) => console.error('Failed to create new-applicant notification:', err));
+
     return true;
 };
 
@@ -407,12 +417,44 @@ export const getJobApplicants = async (jobId: string): Promise<JobApplicant[]> =
         }));
 };
 
+const STATUS_NOTIFICATION_COPY: Partial<Record<Application['status'], (job_title: string, employer_name: string) => { title: string; body: string }>> = {
+    Shortlisted: (job_title, employer_name) => ({
+        title: 'You were shortlisted',
+        body: `${employer_name} shortlisted you for "${job_title}".`,
+    }),
+    Hired: (job_title, employer_name) => ({
+        title: "You're hired!",
+        body: `${employer_name} marked you as hired for "${job_title}". Congratulations!`,
+    }),
+    Rejected: (job_title, employer_name) => ({
+        title: 'Application update',
+        body: `${employer_name} did not move forward with your application for "${job_title}".`,
+    }),
+};
+
 export const updateApplicationStatus = async (
     applicationId: string,
     status: Application['status']
 ): Promise<void> => {
-    const { error } = await supabase.from('applications').update({ status }).eq('id', applicationId);
+    const { data, error } = await supabase
+        .from('applications')
+        .update({ status })
+        .eq('id', applicationId)
+        .select('worker_id, job_title, employer_name')
+        .single();
     if (error) throw error;
+
+    const buildCopy = STATUS_NOTIFICATION_COPY[status];
+    if (data && buildCopy) {
+        const { title, body } = buildCopy(data.job_title, data.employer_name);
+        createNotification({
+            user_id: data.worker_id,
+            type: 'application_status',
+            title,
+            body,
+            link: '/worker/applications',
+        }).catch((err) => console.error('Failed to create status notification:', err));
+    }
 };
 
 /**
@@ -477,6 +519,68 @@ export const getEmployerApplicationsSummary = async (jobIds: string[]): Promise<
         appliedAt: a.applied_at,
         workerSkills: skillsByUserId.get(a.worker_id) ?? [],
     }));
+};
+
+// ---------------------------------------------------------------------------
+// Notifications — in-app, real-time (Supabase Realtime) notifications for
+// both workers and employers. See supabase/migrations/0009_notifications.sql
+// for the table + RLS (a notification can only be inserted by the other
+// party in a real application relationship, never by the recipient).
+// ---------------------------------------------------------------------------
+
+/**
+ * Fire-and-forget: callers should not let a notification failure (e.g. the
+ * migration not yet applied, see the known gap in 0009) break the primary
+ * action it's attached to. Errors are logged, never thrown.
+ */
+const createNotification = async (notification: {
+    user_id: string;
+    type: Notification['type'];
+    title: string;
+    body: string;
+    link?: string;
+}): Promise<void> => {
+    const { error } = await supabase.from('notifications').insert(notification);
+    if (error) console.error('Error creating notification:', error);
+};
+
+export const getNotifications = async (userId: string, limit = 30): Promise<Notification[]> => {
+    const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    if (error) { console.error('Error fetching notifications:', error); return []; }
+    return (data ?? []) as Notification[];
+};
+
+export const markNotificationRead = async (notificationId: string): Promise<void> => {
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
+    if (error) console.error('Error marking notification read:', error);
+};
+
+export const markAllNotificationsRead = async (userId: string): Promise<void> => {
+    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false);
+    if (error) console.error('Error marking all notifications read:', error);
+};
+
+/**
+ * Subscribes to new notifications for a user via Supabase Realtime (a
+ * Postgres logical-replication feed, not the browser Push API — no service
+ * worker or OS-level permission prompt, so it only delivers while the app
+ * is open in a tab). Returns an unsubscribe function.
+ */
+export const subscribeToNotifications = (userId: string, onInsert: (n: Notification) => void): (() => void) => {
+    const channel = supabase
+        .channel(`notifications:${userId}`)
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+            (payload) => onInsert(payload.new as Notification)
+        )
+        .subscribe();
+    return () => { supabase.removeChannel(channel); };
 };
 
 // ---------------------------------------------------------------------------

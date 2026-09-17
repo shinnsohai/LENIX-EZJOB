@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLocale } from '../contexts/LocaleContext';
 import { Sun, Moon, Menu, X } from 'lucide-react';
 import LanguageSwitcher from './LanguageSwitcher';
+import NotificationBell from './NotificationBell';
 
 const Header: React.FC = () => {
     const { user, logout } = useAuth();
@@ -139,6 +140,8 @@ const Header: React.FC = () => {
                     {/* Right side actions */}
                     <div className="flex items-center gap-2 sm:gap-3">
                         <LanguageSwitcher className="hidden sm:flex" />
+
+                        {user && <NotificationBell userId={user.id} />}
 
                         {/* Theme Toggle Button */}
                         <button
