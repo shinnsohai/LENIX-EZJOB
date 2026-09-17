@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import VideoEmbed from "../ui/VideoEmbed";
 import {
   BadgeCheck,
@@ -35,17 +36,19 @@ export default function PassportLayout({ profile, projects, certs, references, o
   const passportRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+
+  // Router-safe link (no HashRouter '/#' prefix) now that the app uses
+  // BrowserRouter. Must be user_id, not the worker_profiles row's own id —
+  // getWorkerProfile() (which PublicWorkerProfile calls) looks up by user_id.
+  const profileUrl = `${window.location.origin}/worker/profile/${profile.user_id}`;
 
   const handleDownloadPDF = () => {
     window.print();
   };
 
   const handleShare = () => {
-    // Router-safe link (no HashRouter '/#' prefix) now that the app uses BrowserRouter.
-    // Must be user_id, not the worker_profiles row's own id — getWorkerProfile()
-    // (which PublicWorkerProfile calls) looks up by user_id.
-    const url = `${window.location.origin}/worker/profile/${profile.user_id}`;
-    navigator.clipboard.writeText(url).then(() => {
+    navigator.clipboard.writeText(profileUrl).then(() => {
       setIsSharing(true);
       setShareError(null);
       setTimeout(() => setIsSharing(false), 2000);
@@ -55,6 +58,17 @@ export default function PassportLayout({ profile, projects, certs, references, o
       setTimeout(() => setShareError(null), 5000);
     });
   };
+
+  // Generated once per profile URL, client-side (no network call) — used
+  // only in the printable header (#pdf-header) so a paper copy or exported
+  // PDF still carries a way back to the live, always-up-to-date profile.
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(profileUrl, { width: 160, margin: 1, color: { dark: '#0f172a', light: '#ffffff' } })
+      .then(dataUrl => { if (!cancelled) setQrCodeDataUrl(dataUrl); })
+      .catch(err => console.error('[PassportLayout] Failed to generate QR code:', err));
+    return () => { cancelled = true; };
+  }, [profileUrl]);
 
   // Calculate Profile Completeness Score (a completeness/points count, not a
   // third-party audit — see the "Profile Completeness Score" label below).
@@ -176,10 +190,29 @@ export default function PassportLayout({ profile, projects, certs, references, o
       </div>
 
       <div ref={passportRef} id="passport-print-root" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Printable Header */}
-        <div id="pdf-header" className="hidden mb-6 text-center border-b border-slate-200 dark:border-slate-800 pb-4">
-          <h1 className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-wider">EZJOB by LENIX</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-mono">Skilled Trades Verification & Digital Skill Passport</p>
+        {/* Printable Header — screen-hidden, shown only via print CSS
+            (see #pdf-header in index.css). Carries a QR code + clickable
+            link back to the live profile since a paper copy otherwise has
+            no way to reach it; Chrome's "Save as PDF" print path keeps
+            <a href> as a real clickable link in the resulting PDF too. */}
+        <div id="pdf-header" className="hidden mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
+          <div className="flex items-center justify-between gap-6">
+            <div className="text-left">
+              <h1 className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-wider">EZJOB by LENIX</h1>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-mono">Skilled Trades Verification & Digital Skill Passport</p>
+            </div>
+            <div className="flex-shrink-0 flex items-center gap-3">
+              {qrCodeDataUrl && (
+                <img src={qrCodeDataUrl} alt="QR code linking to this Skill Passport online" className="w-20 h-20 flex-shrink-0" />
+              )}
+              <div className="text-right">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Full Digital Profile</p>
+                <a href={profileUrl} className="text-xs font-mono text-cyan-600 dark:text-cyan-400 underline break-all">
+                  {profileUrl}
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* --- Hero Banner Card --- */}
