@@ -215,5 +215,144 @@ export const SECTORS: Sector[] = [
                 ]
             }
         ]
+    },
+    {
+        name: "Semiconductor & Electronics",
+        description: "Focus: Wafer Fabs, Cleanrooms, Chip Assembly & Test, Electronics Manufacturing",
+        categories: [
+            {
+                name: "Fab Equipment & Facilities",
+                trades: [
+                    {
+                        name: "Equipment Maintenance Technician (Semicon)",
+                        skills: ["Preventive Maintenance (PM) Scheduling", "Chamber Cleaning/Qualification", "Gas Panel & Chemical Delivery Systems", "Vacuum Pump Servicing", "Particle Contamination Troubleshooting", "SEMI Standards Compliance"]
+                    },
+                    {
+                        name: "Facilities Technician (Cleanroom)",
+                        skills: ["Cleanroom Gowning Protocol", "HVAC/Makeup Air Unit (MAU) Monitoring", "Ultra-Pure Water (UPW) Systems", "Bulk Gas & Chemical Handling", "Facility Monitoring System (FMS)"]
+                    }
+                ]
+            },
+            {
+                name: "Process & Equipment Operations",
+                trades: [
+                    {
+                        name: "Process Operator (Wafer Fab)",
+                        skills: ["Photolithography Tool Operation", "Etch/Deposition Tool Operation", "CMP (Chemical Mechanical Planarization)", "Wafer Handling (FOUP/Cassette)", "SPC Chart Monitoring", "Lot Tracking (MES)"]
+                    },
+                    {
+                        name: "Equipment Automation Technician",
+                        skills: ["SECS/GEM Protocol Basics", "Robot Arm Calibration", "AMHS (Automated Material Handling)", "Tool-to-Host Communication Troubleshooting"]
+                    }
+                ]
+            },
+            {
+                name: "Assembly, Test & Quality",
+                trades: [
+                    {
+                        name: "Die/Wafer Bonding Operator",
+                        skills: ["Wire Bonding", "Die Attach", "Flip Chip Bonding", "Microscope Inspection", "IPC-A-610 Standards"]
+                    },
+                    {
+                        name: "Test & Inspection Technician (Semicon)",
+                        skills: ["Automated Test Equipment (ATE) Operation", "Final Visual Inspection (FVI)", "SPC/Yield Data Logging", "ESD Handling Procedures", "X-Ray/AOI Inspection"]
+                    },
+                    {
+                        name: "SMT / Electronics Assembler",
+                        skills: ["Pick-and-Place Machine Operation", "Reflow Oven Profiling", "Solder Paste Inspection (SPI)", "PCB Rework/Touch-up Soldering", "IPC-A-610 Standards"]
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        name: "Power Generation & Utilities",
+        description: "Focus: Power Plants, Substations, Renewable Energy, Utilities",
+        categories: [
+            {
+                name: "Plant Operations",
+                trades: [
+                    {
+                        name: "Power Plant Operator",
+                        skills: ["Boiler Operation & Monitoring", "Turbine Start-up/Shutdown Sequence", "Control Room DCS Monitoring", "Load Dispatch Coordination", "Plant Log Sheet Recording"]
+                    },
+                    {
+                        name: "Boiler Technician",
+                        skills: ["Boiler Tube Inspection", "Water Treatment Chemistry", "Combustion Tuning", "Soot Blower Operation", "Pressure Vessel Safety"]
+                    }
+                ]
+            },
+            {
+                name: "Turbine & Rotating Equipment",
+                trades: [
+                    {
+                        name: "Turbine Technician",
+                        skills: ["Steam/Gas Turbine Overhaul", "Rotor Alignment", "Bearing Inspection & Lubrication", "Vibration Monitoring", "Generator Excitation Systems"]
+                    }
+                ]
+            },
+            {
+                name: "Electrical & Switchyard",
+                trades: [
+                    {
+                        name: "High-Voltage Switchyard Technician",
+                        skills: ["Switchgear Operation & Maintenance", "Transformer Testing", "Protection Relay Testing", "HV Cable Jointing/Termination", "Earthing System Testing"]
+                    },
+                    {
+                        name: "SCADA / Control Systems Technician",
+                        skills: ["SCADA System Monitoring", "PLC Troubleshooting", "RTU Configuration", "Remote Telemetry Fault Finding"]
+                    }
+                ]
+            },
+            {
+                name: "Renewable Energy",
+                trades: [
+                    {
+                        name: "Solar PV Technician",
+                        skills: ["PV Panel Installation", "Inverter Commissioning", "String/Array Testing", "Solar Monitoring Platform Setup", "Electrical Isolation & LOTO"]
+                    },
+                    {
+                        name: "Wind Turbine Technician",
+                        skills: ["Nacelle Component Inspection", "Blade Inspection (Rope Access)", "Gearbox/Yaw System Maintenance", "Working at Height (Wind)"]
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        name: "Soft Skills & Computer Literacy",
+        description: "Focus: Communication, teamwork, and digital skills that apply across every trade",
+        categories: [
+            {
+                name: "Workplace & Communication Skills",
+                trades: [
+                    {
+                        name: "Communication & Teamwork",
+                        skills: ["Verbal Communication", "Active Listening", "Team Collaboration", "Conflict Resolution", "Customer Service", "Multilingual Communication"]
+                    },
+                    {
+                        name: "Leadership & Supervision",
+                        skills: ["Team Briefing/Toolbox Talk", "Work Scheduling", "Performance Coaching", "Conflict Mediation", "Shift Handover Reporting"]
+                    },
+                    {
+                        name: "Work Ethic & Problem Solving",
+                        skills: ["Time Management", "Attention to Detail", "Adaptability", "Initiative", "Problem-Solving Under Pressure"]
+                    }
+                ]
+            },
+            {
+                name: "Computer & Digital Skills",
+                trades: [
+                    {
+                        name: "Basic Computer Literacy",
+                        skills: ["Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint", "Email & Calendar Management", "Typing Speed & Accuracy"]
+                    },
+                    {
+                        name: "Digital Tools & Reporting",
+                        skills: ["Mobile App Data Entry (Digital Forms)", "WhatsApp/Telegram for Work Communication", "Basic Troubleshooting (PC/Printer)", "Cloud File Sharing (Google Drive/OneDrive)"]
+                    }
+                ]
+            }
+        ]
     }
 ];
