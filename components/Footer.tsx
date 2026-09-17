@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLocale } from '../contexts/LocaleContext';
+import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../types';
 import { subscribeToNewsletter } from '../services/db';
 import BrandLogoCluster from './BrandLogoCluster';
 
@@ -12,6 +14,7 @@ const Footer: React.FC = () => {
     const { quickLinks, siteAssets } = useSiteContent();
     const { isDark } = useTheme();
     const { t } = useLocale();
+    const { user } = useAuth();
 
     const [newsletterEmail, setNewsletterEmail] = useState('');
     const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -67,6 +70,13 @@ const Footer: React.FC = () => {
                             <li><Link to="/jobs" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.searchAllJobs')}</Link></li>
                             <li><Link to="/services" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.ourServices')}</Link></li>
                             <li><Link to="/solutions" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('footer.ourSolutions')}</Link></li>
+                            <li>
+                                {user?.role === UserRole.EMPLOYER || user?.role === UserRole.ADMIN ? (
+                                    <Link to="/employer/dashboard" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('nav.employerStudio')}</Link>
+                                ) : (
+                                    <Link to="/register" state={{ role: UserRole.EMPLOYER }} className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{t('nav.forEmployers')}</Link>
+                                )}
+                            </li>
                             {quickLinks.map(link => (
                                 <li key={link.id}>
                                     <Link to={link.url} className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{link.text}</Link>
