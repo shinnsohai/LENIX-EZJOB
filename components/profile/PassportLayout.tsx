@@ -194,23 +194,31 @@ export default function PassportLayout({ profile, projects, certs, references, o
             (see #pdf-header in index.css). Carries a QR code + clickable
             link back to the live profile since a paper copy otherwise has
             no way to reach it; Chrome's "Save as PDF" print path keeps
-            <a href> as a real clickable link in the resulting PDF too. */}
+            <a href> as a real clickable link in the resulting PDF too.
+            Stacked in one column rather than a title/QR two-column row:
+            a fixed-width side-by-side layout starved the title of room on
+            narrower print/page widths, wrapping "EZJOB by LENIX" onto
+            three lines and clipping the profile URL. Always the light-
+            theme logo marks here — paper is always light regardless of
+            the on-screen theme, same reasoning as the rest of this
+            print stylesheet (see index.css's @media print block). */}
         <div id="pdf-header" className="hidden mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div className="flex items-center justify-between gap-6">
-            <div className="text-left">
-              <h1 className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-wider">EZJOB by LENIX</h1>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-mono">Skilled Trades Verification & Digital Skill Passport</p>
-            </div>
-            <div className="flex-shrink-0 flex items-center gap-3">
-              {qrCodeDataUrl && (
-                <img src={qrCodeDataUrl} alt="QR code linking to this Skill Passport online" className="w-20 h-20 flex-shrink-0" />
-              )}
-              <div className="text-right">
-                <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Full Digital Profile</p>
-                <a href={profileUrl} className="text-xs font-mono text-cyan-600 dark:text-cyan-400 underline break-all">
-                  {profileUrl}
-                </a>
-              </div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <img src="/assets/ezjob-logo-light.png" alt="EZJOB" className="h-9 w-auto" />
+            <span className="text-base font-semibold text-slate-400">by</span>
+            <img src="/assets/lenix-logo-light.png" alt="LENIX" className="h-7 w-auto" />
+          </div>
+          <p className="text-slate-500 text-sm font-mono mt-1.5">Skilled Trades Verification & Digital Skill Passport</p>
+
+          <div className="mt-4 flex items-center gap-3">
+            {qrCodeDataUrl && (
+              <img src={qrCodeDataUrl} alt="QR code linking to this Skill Passport online" className="w-16 h-16 flex-shrink-0" />
+            )}
+            <div className="min-w-0">
+              <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Full Digital Profile</p>
+              <a href={profileUrl} className="text-xs font-mono text-cyan-600 underline break-all">
+                {profileUrl}
+              </a>
             </div>
           </div>
         </div>
