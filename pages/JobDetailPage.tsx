@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getJobById, getWorkerApplications, createApplication, getWorkerProfile, saveWorkerProfile } from '../services/db';
+import { getJobById, getEmployerProfile, getWorkerApplications, createApplication, getWorkerProfile, saveWorkerProfile } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import Spinner from '../components/Spinner';
 import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift, Languages, Users, Plus, Check } from 'lucide-react';
 import { UserRole } from '../types';
-import type { Job, WorkerProfile } from '../types';
+import type { Job, WorkerProfile, EmployerProfile } from '../types';
 import { formatSalaryRange } from '../data/currencies';
 import { TRANSLATION_LANGUAGES, languageLabel } from '../data/languages';
 import { useLocale } from '../contexts/LocaleContext';
@@ -20,6 +20,11 @@ export default function JobDetailPage() {
     const { showToast } = useToast();
     const { t } = useLocale();
     const [job, setJob] = useState<Job | null>(null);
+    // The job's own employer_name/logo are a snapshot taken at posting time
+    // (see EmployerDashboard's handleCreateJob) — this is the live company
+    // profile, fetched by the same employer_id the "View Company" link
+    // navigates to, so the name shown here never drifts from that page.
+    const [employerProfile, setEmployerProfile] = useState<EmployerProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [applying, setApplying] = useState(false);
     const [hasApplied, setHasApplied] = useState(false);
@@ -49,6 +54,7 @@ export default function JobDetailPage() {
 
             if (jobData) {
                 setJob(jobData);
+                getEmployerProfile(jobData.employer_id).then(setEmployerProfile);
             } else {
                 console.error("Job not found");
             }
@@ -200,10 +206,14 @@ export default function JobDetailPage() {
                         <div className="flex-1">
                             <button
                                 onClick={handleViewCompany}
-                                className="text-emerald-600 font-semibold hover:text-emerald-700 hover:underline text-lg mb-2"
+                                className="text-emerald-600 font-semibold hover:text-emerald-700 hover:underline text-lg mb-2 inline-flex items-center gap-2"
                             >
-                                <Building2 size={20} className="inline mr-2" />
-                                {job.employer_name}
+                                {employerProfile?.company_logo_url ? (
+                                    <img src={employerProfile.company_logo_url} alt="" className="h-6 w-6 rounded object-cover flex-shrink-0" />
+                                ) : (
+                                    <Building2 size={20} className="flex-shrink-0" />
+                                )}
+                                {employerProfile?.company_name || job.employer_name}
                             </button>
                             <h1 className="text-4xl font-bold text-slate-900 mb-4">{displayJob.title}</h1>
 
