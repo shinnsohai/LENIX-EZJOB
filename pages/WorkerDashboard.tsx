@@ -614,11 +614,11 @@ export default function WorkerDashboard() {
             {step === 3 && (
                 <div className="space-y-6 bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
                     <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-lg text-sm text-blue-800 dark:text-blue-300 border border-blue-100 dark:border-blue-900">
-                        <strong>Pro Tip:</strong> Upload your videos to YouTube, TikTok, or Facebook first, then paste the link here.
+                        <strong>Pro Tip:</strong> Upload your videos to YouTube, TikTok, Instagram, or Facebook first, then paste the link here.
                     </div>
 
                     <VideoLinkInput
-                        label="Intro Video Link (YouTube/TikTok)"
+                        label="Intro Video Link (YouTube/TikTok/IG/FB)"
                         placeholder="https://youtube.com/watch?v=..."
                         value={profile.media_links?.intro_video_url || ''}
                         onChange={(val) => setProfile({ ...profile, media_links: { ...profile.media_links, intro_video_url: val } })}

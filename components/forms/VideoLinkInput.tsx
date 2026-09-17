@@ -13,8 +13,11 @@ export default function VideoLinkInput({ label, value, onChange, placeholder }: 
   const [status, setStatus] = useState<'idle' | 'valid' | 'invalid'>('idle'); 
 
   const validateUrl = (url: string) => {
-    // Pragmatic allowlist for common video platforms (and their common subdomains/short-link forms).
-    const videoRegex = /^(https?:\/\/)?(www\.|m\.|player\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com|tiktok\.com|vimeo\.com|facebook\.com|fb\.watch)\/.+$/;
+    // Pragmatic allowlist for common video platforms (and their common
+    // subdomains/short-link forms), plus Google Drive/Dropbox share links —
+    // a practical fallback for workers who just want to share a raw video
+    // file without posting it to a social platform first.
+    const videoRegex = /^(https?:\/\/)?(www\.|m\.|player\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com|tiktok\.com|vimeo\.com|facebook\.com|fb\.watch|instagram\.com|twitter\.com|x\.com|drive\.google\.com|dropbox\.com)\/.+$/;
 
     if (!url) {
       setStatus('idle');
@@ -58,7 +61,7 @@ export default function VideoLinkInput({ label, value, onChange, placeholder }: 
         </div>
       </div>
       {status === 'invalid' && (
-        <p className="text-xs text-red-500 dark:text-red-400 mt-1">Please enter a valid link (YouTube, TikTok, Vimeo, FB).</p>
+        <p className="text-xs text-red-500 dark:text-red-400 mt-1">Please enter a valid link (YouTube, TikTok, Instagram, Facebook, Vimeo, X, or a Google Drive/Dropbox share link).</p>
       )}
     </div>
   );

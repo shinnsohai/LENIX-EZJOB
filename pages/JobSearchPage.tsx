@@ -300,8 +300,22 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
         if (!isTop || exiting) return;
         startXRef.current = e.clientX;
         pointerIdRef.current = e.pointerId;
-        e.currentTarget.setPointerCapture(e.pointerId);
+        // setDragging must run regardless of capture succeeding — some mobile
+        // browsers (notably in-app webviews like Facebook/Instagram/TikTok's,
+        // which is how many workers actually open a shared job link) can
+        // throw on setPointerCapture for a touch pointer. Uncaught, that
+        // exception skips every statement after it in this handler, so
+        // dragging never turns on and every subsequent pointermove is
+        // silently ignored — exactly "the card won't swipe" with no error
+        // visible to the user.
         setDragging(true);
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+            // Capture is a nice-to-have (keeps the drag tracking the finger
+            // if it strays outside the card) — our own pointermove/pointerup
+            // handlers still work without it.
+        }
     };
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -332,6 +346,14 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
             transition: dragging ? 'none' : 'transform 280ms cubic-bezier(0.16, 1, 0.3, 1), opacity 280ms ease',
             opacity: exiting ? 0 : 1,
             zIndex: 30,
+            // Belt-and-suspenders alongside the touch-none class below —
+            // guards against real-device quirks (in particular in-app
+            // webviews) where a class-based touch-action is applied less
+            // reliably than an inline one, and disables iOS's press-and-hold
+            // callout/selection so it can't hijack the drag mid-gesture.
+            touchAction: 'none',
+            WebkitTouchCallout: 'none',
+            WebkitUserSelect: 'none',
         }
         : {
             transform: `translateY(${depth * 12}px) scale(${1 - depth * 0.045})`,
