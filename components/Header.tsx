@@ -56,7 +56,13 @@ const Header: React.FC = () => {
             to="/"
             className="flex items-center select-none py-1.5 px-3 rounded-2xl bg-gradient-to-r from-slate-50/80 via-white/90 to-slate-50/80 dark:from-slate-900/80 dark:via-slate-950/90 dark:to-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 shadow-sm hover:shadow-md dark:shadow-cyan-500/5 hover:border-cyan-500/40 hover:scale-[1.03] active:scale-95 transition-all duration-300"
         >
-            <img src={ezjobLogoSrc} alt="EZJOB" className="h-12 sm:h-14 md:h-16 w-auto object-contain" />
+            <img
+                src={ezjobLogoSrc}
+                alt="EZJOB"
+                width={310}
+                height={100}
+                className="h-12 sm:h-14 md:h-16 w-auto object-contain"
+            />
         </Link>
     );
 

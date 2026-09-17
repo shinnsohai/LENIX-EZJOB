@@ -126,6 +126,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                             <img
                                 src={clarityLogoSrc}
                                 alt="Clarity E&C Holding Company"
+                                width={107}
+                                height={100}
                                 className="h-11 sm:h-12 w-auto object-contain"
                             />
                         </div>
@@ -134,6 +136,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                             <img
                                 src={lenixLogoSrc}
                                 alt="LENIX Company"
+                                width={260}
+                                height={100}
                                 className="h-9 sm:h-10 w-auto object-contain"
                             />
                         </div>
@@ -141,6 +145,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ mode }) => {
                         <img
                             src={ezjobLogoSrc}
                             alt="EZJOB Product"
+                            width={310}
+                            height={100}
                             className="h-9 sm:h-10 w-auto object-contain"
                         />
                     </div>

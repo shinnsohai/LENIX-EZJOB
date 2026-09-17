@@ -204,9 +204,9 @@ export default function PassportLayout({ profile, projects, certs, references, o
             print stylesheet (see index.css's @media print block). */}
         <div id="pdf-header" className="hidden mb-6 border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <img src="/assets/ezjob-logo-light.png" alt="EZJOB" className="h-9 w-auto" />
+            <img src="/assets/ezjob-logo-light.png" alt="EZJOB" width={310} height={100} className="h-9 w-auto" />
             <span className="text-base font-semibold text-slate-400">by</span>
-            <img src="/assets/lenix-logo-light.png" alt="LENIX" className="h-7 w-auto" />
+            <img src="/assets/lenix-logo-light.png" alt="LENIX" width={260} height={100} className="h-7 w-auto" />
           </div>
           <p className="text-slate-500 text-sm font-mono mt-1.5">Skilled Trades Verification & Digital Skill Passport</p>
 

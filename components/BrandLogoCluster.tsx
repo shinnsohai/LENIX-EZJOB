@@ -27,6 +27,8 @@ const BrandLogoCluster: React.FC<BrandLogoClusterProps> = ({ ezjobLogoUrl }) => 
                 <img
                     src={clarityLogoSrc}
                     alt="Clarity E&C Holding Company"
+                    width={107}
+                    height={100}
                     className="h-10 sm:h-11 w-auto object-contain"
                 />
             </div>
@@ -35,6 +37,8 @@ const BrandLogoCluster: React.FC<BrandLogoClusterProps> = ({ ezjobLogoUrl }) => 
                 <img
                     src={lenixLogoSrc}
                     alt="LENIX Company Logo"
+                    width={260}
+                    height={100}
                     className="h-8 sm:h-9 w-auto object-contain"
                 />
             </div>
@@ -42,6 +46,8 @@ const BrandLogoCluster: React.FC<BrandLogoClusterProps> = ({ ezjobLogoUrl }) => 
             <img
                 src={ezjobLogoSrc}
                 alt="EZJOB Product Logo"
+                width={310}
+                height={100}
                 className="h-8 sm:h-9 w-auto object-contain"
             />
         </>
