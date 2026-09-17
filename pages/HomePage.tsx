@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSiteContent } from '../contexts/SiteContentContext';
 import { useLocale } from '../contexts/LocaleContext';
@@ -248,110 +248,130 @@ function useShouldPlayHeroVideo() {
     return shouldPlay;
 }
 
-const CREW_PHOTO_COUNT = 12;
-const CREW_PHOTOS = Array.from(
-    { length: CREW_PHOTO_COUNT },
-    (_, i) => `/assets/crew/worker-${String(i + 1).padStart(2, '0')}.webp`
-);
+// Illustrative crew for the hero's rotating worker cutout — not real EZJOB
+// workers, same spirit as this page's other illustrative content (the
+// sample role cards in HighVelocityRolesSection). country/role are
+// deliberately plain English strings, not t() keys: consistent with the
+// previous crew section's CREW_PERSONS (names weren't translated either),
+// and matching the headline word each one is paired with (see below), which
+// has the same "stays English" reasoning.
+interface HeroWorker {
+    country: string;
+    role: string;
+    image: string;
+    /** The word that completes "Jobs that move ___" while this worker is
+     * shown. Kept English-only rather than run through t(): the headline is
+     * a specific English wordplay construction ("Jobs that move Asia/
+     * People/Families...") whose grammar doesn't decompose cleanly into a
+     * word-substitution slot across languages with different word order
+     * (Chinese, Tamil, Bengali, Burmese among this app's locales) — a literal
+     * per-language word list would just produce ungrammatical headlines. */
+    word: string;
+}
 
-// Illustrative personas for the hover tooltip — not real EZJOB workers, same
-// spirit as this page's other illustrative content (the sample role cards in
-// HighVelocityRolesSection). Nationalities picked for a plausible SG/MY
-// skilled-trades workforce mix, deliberately overlapping this app's own
-// supported languages (MY, BD, CN, MM) among others. storyKey is a literal
-// tuple type, not a template-constructed string, so it still type-checks
-// against t()'s keyof UIStrings constraint.
-const CREW_STORY_KEYS = [
-    'homepage.crewStory1', 'homepage.crewStory2', 'homepage.crewStory3', 'homepage.crewStory4',
-    'homepage.crewStory5', 'homepage.crewStory6', 'homepage.crewStory7', 'homepage.crewStory8',
-    'homepage.crewStory9', 'homepage.crewStory10', 'homepage.crewStory11', 'homepage.crewStory12',
-] as const;
-const CREW_PERSONS: { flag: string; name: string }[] = [
-    { flag: '🇲🇾', name: 'Nur Aisyah' },
-    { flag: '🇧🇩', name: 'Abdul Karim' },
-    { flag: '🇵🇭', name: 'Maria Santos' },
-    { flag: '🇮🇳', name: 'Karthik Raja' },
-    { flag: '🇻🇳', name: 'Lan Nguyen' },
-    { flag: '🇨🇳', name: 'Chen Wei' },
-    { flag: '🇮🇩', name: 'Budi Santoso' },
-    { flag: '🇲🇾', name: 'Siti Nurhaliza' },
-    { flag: '🇳🇵', name: 'Bishnu Thapa' },
-    { flag: '🇵🇰', name: 'Imran Ahmed' },
-    { flag: '🇲🇲', name: 'Thandar Win' },
-    { flag: '🇱🇰', name: 'Nimal Perera' },
+const HERO_WORKERS: HeroWorker[] = [
+    { country: 'India', role: 'Electrician', image: '/assets/hero-workers/indian.webp', word: 'Asia' },
+    { country: 'Bangladesh', role: 'Warehouse Technician', image: '/assets/hero-workers/bangladeshi.webp', word: 'People' },
+    { country: 'Nepal', role: 'Construction Mason', image: '/assets/hero-workers/nepali.webp', word: 'Families' },
+    { country: 'Philippines', role: 'Maintenance Technician', image: '/assets/hero-workers/filipino.webp', word: 'Futures' },
+    { country: 'Vietnam', role: 'Machine Technician', image: '/assets/hero-workers/vietnamese.webp', word: 'Careers' },
+    { country: 'Indonesia', role: 'Port Logistics Worker', image: '/assets/hero-workers/indonesian.webp', word: 'Industry' },
+    { country: 'Malaysia', role: 'Warehouse Operator', image: '/assets/hero-workers/malay.webp', word: 'Progress' },
+    { country: 'China', role: 'Mechanical Technician', image: '/assets/hero-workers/chinese.webp', word: 'Forward' },
+    { country: 'Pakistan', role: 'Industrial Welder', image: '/assets/hero-workers/pakistani.webp', word: 'Teams' },
+    { country: 'Sri Lanka', role: 'HVAC Technician', image: '/assets/hero-workers/sri-lankan.webp', word: 'Homes' },
+    { country: 'Myanmar', role: 'Shipyard Fitter', image: '/assets/hero-workers/myanmar.webp', word: 'Dreams' },
+    { country: 'Thailand', role: 'Warehouse Operator', image: '/assets/hero-workers/thai.webp', word: 'Together' },
 ];
 
-/** Twelve verified crew members standing in a row directly on the hero's own
- * video background (no separate background photo of its own anymore — that
- * was needed when the hero sat on a flat color; now the hero itself supplies
- * the moving backdrop, and stacking a second photo here would just compete
- * with it). Hovering one crew member brings them forward at full clarity,
- * fades every other member back, and pops a tooltip with their flag, name,
- * and a one-line story — plain React hover state per figure, not CSS
- * :has(): tried the pure-CSS version first, but this environment's Chromium
- * build matches :has() via `.matches()` without actually invalidating
- * computed style for it (a real, known class of bug in early :has()
- * implementations), so the fade silently never painted. Per-image
- * onMouseEnter/onMouseLeave has no such ambiguity. */
-const CrewLineup = () => {
-    const { t } = useLocale();
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+/** Drives the hero's auto-advancing worker/word rotation. Under
+ * prefers-reduced-motion the timer never starts at all (not just a slower
+ * interval) — the hero settles on worker 0 and stays there, matching this
+ * project's existing reduced-motion posture elsewhere (settle once, don't
+ * keep moving). Pauses the interval on tab-hide/resumes on tab-show so a
+ * backgrounded tab doesn't silently burn through the whole 12-worker cycle
+ * before the visitor looks back. */
+function useWorkerRotation(count: number, intervalMs: number) {
+    const [prefersReducedMotion] = useState<boolean>(() =>
+        typeof window !== 'undefined' && window.matchMedia
+            ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            : false
+    );
+    const [active, setActive] = useState(0);
+    const [previous, setPrevious] = useState<number | null>(null);
+    const [cycleKey, setCycleKey] = useState(0);
+
+    const advance = useCallback(() => {
+        setActive(prev => {
+            setPrevious(prev);
+            return (prev + 1) % count;
+        });
+        setCycleKey(k => k + 1);
+    }, [count]);
+
+    useEffect(() => {
+        if (prefersReducedMotion) return;
+        let timer: number;
+        const start = () => { timer = window.setInterval(advance, intervalMs); };
+        start();
+
+        const handleVisibility = () => {
+            window.clearInterval(timer);
+            if (!document.hidden) start();
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, [advance, intervalMs, prefersReducedMotion]);
+
+    return { active, previous, cycleKey, prefersReducedMotion };
+}
+
+/** The hero's progress bar: fills 0 -> 100% in sync with the current
+ * worker's on-screen duration, then resets for the next one. A plain CSS
+ * transition driven by direct style writes (reset with transition
+ * disabled, forced reflow, then re-enabled and set to 100%) rather than a
+ * @keyframes animation — same "no new keyframe" constraint as the rest of
+ * this rotation, and the same reset technique HomePage already used
+ * elsewhere (see the crew lineup's git history) for "replay a transition
+ * from the start on re-trigger." */
+const HeroProgressBar: React.FC<{ cycleKey: number; durationMs: number; prefersReducedMotion: boolean }> = ({ cycleKey, durationMs, prefersReducedMotion }) => {
+    const barRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (prefersReducedMotion) return;
+        const el = barRef.current;
+        if (!el) return;
+        el.style.transition = 'none';
+        el.style.width = '0%';
+        void el.offsetWidth;
+        el.style.transition = `width ${durationMs}ms linear`;
+        el.style.width = '100%';
+    }, [cycleKey, durationMs, prefersReducedMotion]);
+
+    if (prefersReducedMotion) return null;
 
     return (
-        <div className="relative h-56 sm:h-64 lg:h-72">
-            <div
-                className="absolute inset-0 flex items-end overflow-x-auto sm:overflow-visible"
-                role="img"
-                aria-label="Photos of EZJOB's verified skilled trades workforce"
-                onMouseLeave={() => setHoveredIndex(null)}
-            >
-                {CREW_PHOTOS.map((src, i) => {
-                    const isHovered = hoveredIndex === i;
-                    const isDimmed = hoveredIndex !== null && !isHovered;
-                    const isFirst = i === 0;
-                    const isLast = i === CREW_PHOTOS.length - 1;
-                    const person = CREW_PERSONS[i];
-                    const tooltipAlign = isFirst ? 'left-0' : isLast ? 'right-0' : 'left-1/2 -translate-x-1/2';
-                    const arrowAlign = isFirst ? 'left-5' : isLast ? 'right-5' : 'left-1/2 -translate-x-1/2';
-                    return (
-                        <div key={i} className="relative flex-none w-20 sm:w-auto sm:flex-1 sm:min-w-0 h-full flex items-end">
-                            {isHovered && (
-                                <div
-                                    role="tooltip"
-                                    className={`absolute bottom-full mb-3 ${tooltipAlign} z-20 w-48 pointer-events-none motion-safe:animate-fade-in-up`}
-                                >
-                                    <div className="bg-slate-900/95 border border-white/10 rounded-xl px-3.5 py-3 shadow-xl text-left backdrop-blur-md">
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                            <span className="text-base leading-none" aria-hidden="true">{person.flag}</span>
-                                            <span className="font-mono text-xs font-bold text-white">{person.name}</span>
-                                        </div>
-                                        <p className="text-[11px] text-slate-300 leading-snug">{t(CREW_STORY_KEYS[i])}</p>
-                                    </div>
-                                    <div
-                                        className={`absolute top-full ${arrowAlign} w-2.5 h-2.5 -mt-1.5 bg-slate-900/95 border-r border-b border-white/10 rotate-45`}
-                                        aria-hidden="true"
-                                    />
-                                </div>
-                            )}
-                            <img
-                                src={src}
-                                alt=""
-                                aria-hidden="true"
-                                loading="lazy"
-                                draggable={false}
-                                onMouseEnter={() => setHoveredIndex(i)}
-                                className={`w-full h-[92%] object-contain object-bottom select-none transition-[opacity,filter,transform] duration-300 ease-out ${
-                                    isDimmed ? 'opacity-40 grayscale' : 'opacity-100'
-                                } ${isHovered ? 'relative z-10 motion-safe:scale-110 motion-safe:-translate-y-2' : ''}`}
-                            />
-                        </div>
-                    );
-                })}
-            </div>
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/10 z-10" aria-hidden="true">
+            <div ref={barRef} className="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-fuchsia-500" style={{ width: '0%' }} />
         </div>
     );
 };
 
+const HERO_ROTATION_INTERVAL_MS = 3800;
+
+/** Adapted from a Codex-generated hero reference (see conversation) with
+ * the background swapped back to this project's own looping promo video —
+ * the reference used a static image + CSS "camera drift" pan/zoom
+ * @keyframes for a sense of motion, which the video already supplies on
+ * its own, so that keyframe simply isn't needed here. Every other piece of
+ * the reference's motion (worker crossfade, headline word swap, progress
+ * bar) is CSS-transition-only, ported via the .hero-worker-cutout rules in
+ * index.css plus the inline transition classes below — no new @keyframes,
+ * so this stays inside the existing "one approved keyframe" rule rather
+ * than needing a documented exception like the Services/Solutions page did. */
 const HeroSection = () => {
     const navigate = useNavigate();
     const { t } = useLocale();
@@ -363,6 +383,32 @@ const HeroSection = () => {
     // itself. Capped low, per parallax's "subtle or nothing" ceiling.
     const scrollY = useScrollY(320);
     const videoOffset = -scrollY * 0.08;
+
+    const { active, previous, cycleKey, prefersReducedMotion } = useWorkerRotation(HERO_WORKERS.length, HERO_ROTATION_INTERVAL_MS);
+    const currentWorker = HERO_WORKERS[active];
+
+    // Headline word swap: the visible word lags one tick behind `active` so
+    // it can fade/slide out before the text underneath changes, then fade/
+    // slide back in as the new word — same two-phase timing as the worker
+    // cutout crossfade, just via component state instead of CSS classes
+    // (there's no separate DOM node per word to toggle classes on).
+    const [displayedWord, setDisplayedWord] = useState(currentWorker.word);
+    const [isWordSwapping, setIsWordSwapping] = useState(false);
+    useEffect(() => {
+        const nextWord = HERO_WORKERS[active].word;
+        if (nextWord === displayedWord) return;
+        if (prefersReducedMotion) {
+            setDisplayedWord(nextWord);
+            return;
+        }
+        setIsWordSwapping(true);
+        const timeout = window.setTimeout(() => {
+            setDisplayedWord(nextWord);
+            setIsWordSwapping(false);
+        }, 300);
+        return () => window.clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [active]);
 
     return (
         <section className="relative w-full min-h-[620px] sm:min-h-[680px] lg:min-h-[780px] pt-24 sm:pt-28 pb-8 px-4 sm:px-6 lg:px-8 flex flex-col overflow-hidden bg-slate-950 text-white transition-colors duration-300">
@@ -392,11 +438,28 @@ const HeroSection = () => {
 
             {/* Scrim: keeps the headline/body copy legible over moving footage
                 regardless of what's on screen at any given moment — darkest
-                where the text actually sits, easing off toward the right. */}
+                where the text actually sits, easing off toward the right
+                (which is also where the worker cutout stands, on the video). */}
             <div
                 className="absolute inset-0 pointer-events-none bg-gradient-to-r from-slate-950/90 via-slate-950/70 to-slate-950/40"
                 aria-hidden="true"
             />
+
+            {/* Rotating worker cutout — behind the copy column, in front of
+                the scrim. All 12 mounted at once (not swapped in/out of the
+                DOM) so the crossfade transition has something to animate
+                between; only the active/leaving pair is ever visible. */}
+            <div className="absolute inset-0 z-[1] pointer-events-none" aria-hidden="true">
+                {HERO_WORKERS.map((worker, i) => (
+                    <img
+                        key={worker.country}
+                        src={worker.image}
+                        alt=""
+                        loading={i === 0 ? 'eager' : 'lazy'}
+                        className={`hero-worker-cutout ${i === active ? 'is-active' : i === previous ? 'is-leaving' : ''}`}
+                    />
+                ))}
+            </div>
 
             <div className="max-w-7xl mx-auto w-full flex-1 flex items-center relative z-10">
                 <div className="max-w-2xl flex flex-col gap-6 text-left">
@@ -408,9 +471,20 @@ const HeroSection = () => {
                         </span>
                     </div>
 
-                    {/* Headline: 2 lines max, single locked accent for the emphasis word */}
-                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-white max-w-2xl">
-                        {t('homepage.heroHeadlinePrefix')} <span className="text-gradient-cyan-blue">{t('homepage.heroHeadlineAccent')}</span>
+                    {/* Headline: static line + a word that rotates in sync with
+                        the worker cutout, via .text-gradient-lenix — the one
+                        gradient design-system.md approves specifically for
+                        "hero emphasis," so no new accent color is introduced. */}
+                    <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold uppercase tracking-tight leading-[0.9] text-white max-w-2xl">
+                        <span className="block">Jobs that move</span>
+                        <span
+                            className={`block mt-1 text-gradient-lenix transition-all duration-300 ${
+                                isWordSwapping ? 'opacity-0 -translate-y-2' : 'opacity-100 translate-y-0'
+                            }`}
+                            aria-live="polite"
+                        >
+                            {displayedWord}
+                        </span>
                     </h1>
 
                     {/* Subheadline */}
@@ -475,13 +549,34 @@ const HeroSection = () => {
                 </div>
             </div>
 
-            {/* Crew glow lineup — pinned toward the bottom of the hero (a
-                sibling of the flex-1 copy block above, not nested inside it),
-                so there's real separation from the headline instead of
-                sitting cramped right under the stats row. */}
-            <div className="max-w-7xl mx-auto w-full relative z-10 mt-10">
-                <CrewLineup />
+            {/* Worker meta panel — index / country / role for whichever
+                worker is currently on screen, matching the cutout's own
+                sync (same `active` index). Hidden on small screens along
+                with the cutout itself (see index.css's max-width: 900px
+                block) so it never competes with the copy column. */}
+            <div
+                className="hidden sm:flex absolute right-6 lg:right-10 bottom-16 sm:bottom-20 z-10 items-center gap-3 font-mono text-xs uppercase tracking-wider text-white"
+                style={{ textShadow: '0 2px 14px rgba(0,0,0,.7)' }}
+                aria-live="polite"
+            >
+                <span className="text-cyan-300 font-extrabold">{String(active + 1).padStart(2, '0')}</span>
+                <span className="w-8 h-px bg-white/50" aria-hidden="true" />
+                <span>
+                    <strong className="block text-sm normal-case">{currentWorker.country}</strong>
+                    <small className="block mt-1 text-slate-300 text-[11px]">{currentWorker.role}</small>
+                </span>
             </div>
+
+            {/* Scroll cue */}
+            <a
+                href="#how-it-works"
+                className="hidden sm:flex absolute bottom-6 left-1/2 -translate-x-1/2 z-10 items-center gap-2.5 text-cyan-300 font-mono text-xs font-bold uppercase tracking-wider hover:text-cyan-200 transition-colors"
+            >
+                <span>{t('homepage.heroScrollCue')}</span>
+                <ArrowDown size={14} aria-hidden="true" />
+            </a>
+
+            <HeroProgressBar cycleKey={cycleKey} durationMs={HERO_ROTATION_INTERVAL_MS} prefersReducedMotion={prefersReducedMotion} />
         </section>
     );
 };
@@ -518,7 +613,7 @@ const HowItWorksSection = () => {
     ];
 
     return (
-        <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
+        <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full transition-colors duration-300">
             <Reveal className="text-center max-w-2xl mx-auto mb-10">
                 <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">{t('homepage.howItWorksHeading')}</h2>
             </Reveal>

@@ -87,6 +87,50 @@
     }
 }
 
+/* HomePage hero — rotating worker cutout crossfade. Transition-only (no
+   @keyframes, so it doesn't need a Motion-section exception): each of the
+   12 photos starts in an off-screen "hasn't appeared yet" pose, animates in
+   when given .is-active, and animates to a distinct "just left" pose when
+   given .is-leaving instead — an asymmetric in-from-right/out-to-left swap,
+   not a simple fade. prefers-reduced-motion is handled in JS (the rotation
+   timer never starts), not here, since the very first photo still needs to
+   transition to .is-active once on mount regardless of motion preference. */
+.hero-worker-cutout {
+    position: absolute;
+    right: clamp(-2rem, 1vw, 2rem);
+    bottom: -4%;
+    width: min(46vw, 640px);
+    height: 92%;
+    object-fit: contain;
+    object-position: bottom center;
+    opacity: 0;
+    filter: drop-shadow(0 24px 35px rgba(0, 0, 0, 0.38));
+    transform: translate3d(56px, 24px, 0) scale(0.97);
+    transition: opacity 0.72s ease, transform 0.92s cubic-bezier(0.2, 0.75, 0.2, 1);
+}
+
+.hero-worker-cutout.is-active {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+}
+
+.hero-worker-cutout.is-leaving {
+    opacity: 0;
+    transform: translate3d(-45px, 0, 0) scale(1.01);
+}
+
+@media (max-width: 900px) {
+    .hero-worker-cutout {
+        right: -18%;
+        width: 78vw;
+        height: 66%;
+    }
+
+    .hero-worker-cutout.is-active {
+        opacity: 0.55;
+    }
+}
+
 /* Services / Solutions illustration system — a scoped, documented exception
    to the "one approved keyframe" rule (see design-system.md, Motion
    section). Each scene is one AI-generated illustration split into a
