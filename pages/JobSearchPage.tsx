@@ -5,7 +5,7 @@ import Spinner from '../components/Spinner';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
-import { ArrowUpDown, Search, MapPin, DollarSign, Calendar, Sparkles, Building2, CheckCircle2, Clock, Bus, Home, Users, LayoutGrid, Hand, X, Heart, Target } from 'lucide-react';
+import { Search, MapPin, DollarSign, Building2, CheckCircle2, Clock, Bus, Home, Users, LayoutGrid, Hand, X, Heart, Target, ChevronDown, Bookmark, BookmarkCheck } from 'lucide-react';
 import { formatSalaryRange } from '../data/currencies';
 import { useLocale } from '../contexts/LocaleContext';
 import type { UIStrings } from '../locales';
@@ -24,6 +24,73 @@ const TRADE_CATEGORIES: { key: keyof UIStrings; match: string }[] = [
     { key: 'jobSearch.categorySafety', match: 'Safety Oversight' },
 ];
 
+// A job posted within this window gets a real (not decorative) "New" badge.
+const NEW_BADGE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000;
+
+// Company "logo" is an initial-letter avatar, not a fabricated image — Job
+// records don't carry a logo URL. Color is a deterministic hash into the
+// four approved brand hues (design-system.md), never a random/cycled value.
+const AVATAR_STYLES = ['bg-cyan-500', 'bg-blue-500', 'bg-fuchsia-500', 'bg-orange-500'];
+const getAvatarStyle = (name: string): string => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return AVATAR_STYLES[hash % AVATAR_STYLES.length];
+};
+const CompanyAvatar: React.FC<{ name: string }> = ({ name }) => (
+    <div className={`flex-shrink-0 h-11 w-11 sm:h-12 sm:w-12 rounded-xl ${getAvatarStyle(name)} text-white flex items-center justify-center font-bold text-lg shadow-sm`}>
+        {name.charAt(0).toUpperCase()}
+    </div>
+);
+
+// Genuinely locale-aware ("57 mins ago", "2 days ago", ...) via the
+// browser's own ICU data — no per-language strings to maintain by hand.
+const formatRelativeTime = (iso: string, locale: string): string => {
+    const diffMinutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    try {
+        const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+        if (Math.abs(diffMinutes) < 60) return rtf.format(-diffMinutes, 'minute');
+        const diffHours = Math.round(diffMinutes / 60);
+        if (Math.abs(diffHours) < 24) return rtf.format(-diffHours, 'hour');
+        const diffDays = Math.round(diffHours / 24);
+        if (Math.abs(diffDays) < 30) return rtf.format(-diffDays, 'day');
+        const diffMonths = Math.round(diffDays / 30);
+        if (Math.abs(diffMonths) < 12) return rtf.format(-diffMonths, 'month');
+        return rtf.format(-Math.round(diffMonths / 12), 'year');
+    } catch {
+        return new Date(iso).toLocaleDateString();
+    }
+};
+
+const SAVED_JOBS_STORAGE_KEY = 'ezjob_saved_jobs';
+// Per-viewer convenience, not shared/authoritative state — localStorage is
+// the right home for it (see design conventions on browser storage use).
+const useSavedJobs = () => {
+    const [savedIds, setSavedIds] = useState<Set<string>>(() => {
+        try {
+            const raw = localStorage.getItem(SAVED_JOBS_STORAGE_KEY);
+            return raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch {
+            return new Set();
+        }
+    });
+
+    const toggleSave = useCallback((jobId: string) => {
+        setSavedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+            try {
+                localStorage.setItem(SAVED_JOBS_STORAGE_KEY, JSON.stringify(Array.from(next)));
+            } catch {
+                // Private browsing / storage disabled — save still works for
+                // this session, it just won't persist across reloads.
+            }
+            return next;
+        });
+    }, []);
+
+    return { savedIds, toggleSave };
+};
+
 const JobCard: React.FC<{
     job: Job;
     onApply: (job: Job) => void;
@@ -31,170 +98,161 @@ const JobCard: React.FC<{
     hasApplied: boolean;
     onViewJob: (jobId: string) => void;
     onViewCompany: (employerId: string) => void;
-    index: number;
     matchPercent?: number;
-}> = ({ job, onApply, isApplying, hasApplied, onViewJob, onViewCompany, index, matchPercent }) => {
-    const { t } = useLocale();
-    // Dynamic border color styling based on index or urgency
-    const accentBorder = index % 3 === 0
-        ? 'border-l-orange-500'
-        : index % 3 === 1
-            ? 'border-l-cyan-500'
-            : 'border-l-fuchsia-500';
-
-    const badgeStyle = index % 3 === 0
-        ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/30'
-        : index % 3 === 1
-            ? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30'
-            : 'bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/30';
-
-    const badgeLabel = index % 3 === 0 ? t('jobSearch.badgeImmediateStart') : index % 3 === 1 ? t('jobSearch.badgeVerifiedReq') : t('jobSearch.badgeHotRole');
+    isSaved: boolean;
+    onToggleSave: (jobId: string) => void;
+}> = ({ job, onApply, isApplying, hasApplied, onViewJob, onViewCompany, matchPercent, isSaved, onToggleSave }) => {
+    const { t, locale } = useLocale();
+    const isNew = !!job.createdAt && (Date.now() - new Date(job.createdAt).getTime()) < NEW_BADGE_WINDOW_MS;
 
     return (
-        <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 border-l-4 ${accentBorder} shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden ${hasApplied ? 'opacity-90 ring-1 ring-emerald-400' : ''}`}>
-            <div
-                onClick={() => onViewJob(job.id)}
-                className="p-6 flex-grow cursor-pointer"
-            >
-                {/* Top Badge & Company */}
-                <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border ${badgeStyle}`}>
-                            {badgeLabel}
-                        </span>
-                        {matchPercent !== undefined && (
-                            <span
-                                className={`px-2.5 py-0.5 rounded text-[11px] font-mono font-bold uppercase border flex items-center gap-1 flex-shrink-0 ${
-                                    matchPercent >= 70
-                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
-                                        : matchPercent >= 40
-                                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
-                                            : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                                }`}
+        <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-cyan-300 dark:hover:border-cyan-700 hover:shadow-md transition-all duration-200 ${hasApplied ? 'ring-1 ring-emerald-400' : ''}`}>
+            <div onClick={() => onViewJob(job.id)} className="p-5 sm:p-6 cursor-pointer flex gap-4">
+                <CompanyAvatar name={job.employer_name} />
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1.5">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors leading-tight">
+                                    {job.title}
+                                </h3>
+                                {isNew && (
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 flex-shrink-0">
+                                        {t('jobSearch.newBadge')} 🔥
+                                    </span>
+                                )}
+                                {matchPercent !== undefined && (
+                                    <span
+                                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase border flex items-center gap-1 flex-shrink-0 ${
+                                            matchPercent >= 70
+                                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
+                                                : matchPercent >= 40
+                                                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+                                                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                                        }`}
+                                    >
+                                        <Target size={11} /> {t('jobDetail.matchBadge', { percent: matchPercent })}
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onViewCompany(job.employer_id); }}
+                                className="text-sm text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors mt-0.5"
                             >
-                                <Target size={11} /> {t('jobDetail.matchBadge', { percent: matchPercent })}
+                                {job.employer_name}
+                            </button>
+                        </div>
+
+                        <div className="flex-shrink-0 text-right text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                            <div className="flex items-center justify-end gap-1.5">
+                                <MapPin size={13} className="text-slate-400" />
+                                <span className="truncate max-w-[160px]">{job.location}{job.country ? `, ${job.country}` : ''}</span>
+                            </div>
+                            {job.createdAt && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                    <Clock size={13} className="text-slate-400" />
+                                    <span>{formatRelativeTime(job.createdAt, locale)}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-slate-600 dark:text-slate-400">
+                        <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
+                            <DollarSign size={13} className="text-emerald-600 dark:text-emerald-400" />
+                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} {t('common.perYear')}
+                        </span>
+                        {job.transport_provided && (
+                            <span className="flex items-center gap-1"><Bus size={13} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.transport')}</span>
+                        )}
+                        {job.accommodation_provided && (
+                            <span className="flex items-center gap-1"><Home size={13} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.housing')}</span>
+                        )}
+                        {job.available_positions !== undefined && (
+                            <span className="flex items-center gap-1">
+                                <Users size={13} className="text-cyan-600 dark:text-cyan-400" />
+                                {t('jobSearch.positionsOpen', { filled: Math.max(0, job.available_positions - (job.positions_filled ?? 0)), total: job.available_positions })}
                             </span>
                         )}
                     </div>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onViewCompany(job.employer_id);
-                        }}
-                        className="text-xs font-mono text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 truncate max-w-[160px] flex-shrink-0"
-                    >
-                        <Building2 size={13} />
-                        <span className="truncate">{job.employer_name}</span>
-                    </button>
-                </div>
 
-                {/* Job Title */}
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors mb-2 leading-tight">
-                    {job.title}
-                </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mt-3 leading-relaxed">
+                        {job.description}
+                    </p>
 
-                {/* Metadata row */}
-                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 mb-4 font-mono">
-                    <div className="flex items-center gap-1.5">
-                        <MapPin size={14} className="text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
-                        <span className="truncate">{job.location}{job.country ? `, ${job.country}` : ''}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <DollarSign size={14} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} {t('common.perYear')}
-                        </span>
-                    </div>
-                    {job.shift_schedule && (
-                        <div className="flex items-center gap-1.5">
-                            <Clock size={14} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                            <span className="truncate">{job.shift_schedule}</span>
-                        </div>
-                    )}
-                    {(job.transport_provided || job.accommodation_provided) && (
-                        <div className="flex items-center gap-3 flex-wrap">
-                            {job.transport_provided && (
-                                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                                    <Bus size={14} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.transport')}
+                    <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                        <div className="flex flex-wrap gap-1.5">
+                            {job.required_skills?.slice(0, 4).map(skill => (
+                                <span
+                                    key={skill}
+                                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] font-medium rounded-md border border-slate-200/60 dark:border-slate-700/60"
+                                >
+                                    {skill}
                                 </span>
-                            )}
-                            {job.accommodation_provided && (
-                                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                                    <Home size={14} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.housing')}
-                                </span>
-                            )}
+                            ))}
                         </div>
-                    )}
-                    {job.available_positions !== undefined && (
-                        <div className="flex items-center gap-1.5">
-                            <Users size={14} className="text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
-                            <span>{t('jobSearch.positionsOpen', { filled: Math.max(0, job.available_positions - (job.positions_filled ?? 0)), total: job.available_positions })}</span>
+
+                        <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                                onClick={() => onToggleSave(job.id)}
+                                aria-label={isSaved ? t('jobSearch.unsaveJobAria') : t('jobSearch.saveJobAria')}
+                                aria-pressed={isSaved}
+                                className="h-9 w-9 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:border-cyan-400 dark:hover:border-cyan-600 transition-colors cursor-pointer"
+                            >
+                                {isSaved ? <BookmarkCheck size={16} className="text-cyan-600 dark:text-cyan-400" /> : <Bookmark size={16} className="text-slate-400" />}
+                            </button>
+                            <button
+                                onClick={() => onApply(job)}
+                                disabled={isApplying || hasApplied}
+                                className={`text-sm px-5 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer
+                                    ${hasApplied
+                                        ? 'bg-emerald-600 text-white cursor-default'
+                                        : isApplying
+                                            ? 'bg-slate-400 text-white cursor-wait'
+                                            : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-md'
+                                    }`}
+                            >
+                                {hasApplied ? (
+                                    <>
+                                        <CheckCircle2 size={14} />
+                                        {t('jobSearch.applied')}
+                                    </>
+                                ) : isApplying ? (
+                                    t('jobSearch.submitting')
+                                ) : (
+                                    t('jobSearch.applyNow')
+                                )}
+                            </button>
                         </div>
-                    )}
-                    {job.createdAt && (
-                        <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500 text-[11px]">
-                            <Calendar size={13} />
-                            <span>{t('jobSearch.posted', { date: new Date(job.createdAt).toLocaleDateString() })}</span>
-                        </div>
-                    )}
+                    </div>
                 </div>
-
-                {/* Description */}
-                <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-3 mb-4 leading-relaxed">
-                    {job.description}
-                </p>
-
-                {/* Skill tags */}
-                <div className="flex flex-wrap gap-1.5 mt-auto">
-                    {job.required_skills?.slice(0, 4).map(skill => (
-                        <span 
-                            key={skill} 
-                            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono text-[11px] font-medium rounded-md border border-slate-200/60 dark:border-slate-700/60"
-                        >
-                            {skill}
-                        </span>
-                    ))}
-                </div>
-            </div>
-
-            {/* Bottom Action Footer */}
-            <div className="p-4 bg-slate-50/80 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-                <button
-                    onClick={() => onViewJob(job.id)}
-                    className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                >
-                    {t('jobSearch.viewDetails')}
-                </button>
-                
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onApply(job);
-                    }}
-                    disabled={isApplying || hasApplied}
-                    className={`font-mono text-xs uppercase px-5 py-2.5 rounded-full font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer
-                        ${hasApplied
-                            ? 'bg-emerald-600 text-white cursor-default'
-                            : isApplying
-                                ? 'bg-slate-400 text-white cursor-wait'
-                                : 'bg-slate-900 dark:bg-slate-800 hover:bg-cyan-600 dark:hover:bg-cyan-500 text-white hover:shadow-md'
-                        }`}
-                >
-                    {hasApplied ? (
-                        <>
-                            <CheckCircle2 size={14} />
-                            {t('jobSearch.applied')}
-                        </>
-                    ) : isApplying ? (
-                        t('jobSearch.submitting')
-                    ) : (
-                        t('jobSearch.applyNow')
-                    )}
-                </button>
             </div>
         </div>
     );
 };
+
+// Plain, flat filter dropdown matching the light "outlined pill" style —
+// every option is always a fully meaningful state (never a disabled
+// placeholder), so the box always shows what's actually applied.
+const FilterSelect: React.FC<{
+    value: string;
+    onChange: (value: string) => void;
+    ariaLabel: string;
+    children: React.ReactNode;
+}> = ({ value, onChange, ariaLabel, children }) => (
+    <div className="relative">
+        <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={ariaLabel}
+            className="w-full appearance-none pl-3.5 pr-9 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 cursor-pointer truncate"
+        >
+            {children}
+        </select>
+        <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+    </div>
+);
 
 // ---------------------------------------------------------------------------
 // Swipe view — an alternate, "Tinder-card" way to browse the same job list.
@@ -472,14 +530,19 @@ const JobSearchPage: React.FC = () => {
     const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [locationTerm, setLocationTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('All Roles');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'match'>('newest');
+    const [salaryFilter, setSalaryFilter] = useState(0); // 0 = any salary
+    const [countryFilter, setCountryFilter] = useState(''); // '' = any country
+    const [benefitsFilter, setBenefitsFilter] = useState<'any' | 'transport' | 'housing' | 'both'>('any');
     const [applyingId, setApplyingId] = useState<string | null>(null);
     const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'swipe'>('list');
     // Illustrates "how well am I positioned" per job — see utils/jobMatch.ts.
     const [jobMatches, setJobMatches] = useState<Map<string, SkillMatchResult>>(new Map());
+    const { savedIds, toggleSave } = useSavedJobs();
 
     const fetchJobs = useCallback(async () => {
         setIsLoading(true);
@@ -538,6 +601,37 @@ const JobSearchPage: React.FC = () => {
             );
         }
 
+        // Filter by location (separate field from the keyword search above —
+        // matches against location or country specifically).
+        if (locationTerm) {
+            const lowerLoc = locationTerm.toLowerCase();
+            filtered = filtered.filter(job =>
+                job.location.toLowerCase().includes(lowerLoc) ||
+                job.country.toLowerCase().includes(lowerLoc)
+            );
+        }
+
+        // Filter by minimum salary
+        if (salaryFilter > 0) {
+            filtered = filtered.filter(job => (job.salary_min ?? 0) >= salaryFilter);
+        }
+
+        // Filter by country
+        if (countryFilter) {
+            filtered = filtered.filter(job => job.country === countryFilter);
+        }
+
+        // Filter by benefits actually offered on the job (real fields, not
+        // a "workplace type" this app doesn't track — skilled trades roles
+        // here are inherently on-site).
+        if (benefitsFilter !== 'any') {
+            filtered = filtered.filter(job => {
+                if (benefitsFilter === 'transport') return !!job.transport_provided;
+                if (benefitsFilter === 'housing') return !!job.accommodation_provided;
+                return !!job.transport_provided && !!job.accommodation_provided;
+            });
+        }
+
         // Sort
         if (sortOrder === 'match') {
             filtered.sort((a, b) => (jobMatches.get(b.id)?.percent ?? 0) - (jobMatches.get(a.id)?.percent ?? 0));
@@ -550,7 +644,12 @@ const JobSearchPage: React.FC = () => {
         }
 
         setFilteredJobs(filtered);
-    }, [jobs, searchTerm, selectedCategory, sortOrder, jobMatches]);
+    }, [jobs, searchTerm, locationTerm, selectedCategory, salaryFilter, countryFilter, benefitsFilter, sortOrder, jobMatches]);
+
+    const availableCountries = React.useMemo(
+        () => Array.from(new Set(jobs.map(j => j.country).filter(Boolean))).sort(),
+        [jobs]
+    );
 
     const handleApply = async (job: Job) => {
         if (!user) {
@@ -602,72 +701,81 @@ const JobSearchPage: React.FC = () => {
             )}
 
             <div className="max-w-7xl mx-auto">
-                {/* Search Header Banner */}
-                <div className="bg-slate-950 text-white rounded-3xl p-8 sm:p-10 mb-10 shadow-xl border border-slate-800 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                {/* Search Panel */}
+                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 mb-8 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-5">
+                        {t('jobSearch.heading')}
+                    </h1>
 
-                    <div className="relative z-10 max-w-3xl">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900 border border-cyan-500/30 rounded-full text-xs font-mono text-cyan-400 uppercase tracking-widest mb-3">
-                            <Sparkles size={13} />
-                            {t('jobSearch.badge')}
-                        </div>
-                        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-                            {t('jobSearch.heading')}
-                        </h1>
-                        <p className="text-slate-300 text-sm mt-2">
-                            {t('jobSearch.subheading')}
-                        </p>
-                    </div>
-
-                    {/* Search & Sort Controls */}
-                    <div className="mt-8 flex flex-col md:flex-row gap-3 relative z-10">
+                    {/* Keyword + Location + Search */}
+                    <form onSubmit={(e) => e.preventDefault()} className="flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1">
-                            <Search className="absolute left-4 top-3.5 text-slate-400" size={18} />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
                             <input
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder={t('jobSearch.searchPlaceholder')}
-                                className="w-full pl-11 pr-4 py-3 bg-slate-900 border border-slate-700 text-white rounded-full focus:outline-none focus:border-cyan-400 font-mono text-sm placeholder:text-slate-500"
+                                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 text-sm placeholder:text-slate-400"
                             />
                         </div>
-
+                        <div className="relative md:w-64">
+                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                            <input
+                                type="text"
+                                value={locationTerm}
+                                onChange={(e) => setLocationTerm(e.target.value)}
+                                placeholder={t('jobSearch.searchLocationPlaceholder')}
+                                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 text-sm placeholder:text-slate-400"
+                            />
+                        </div>
                         <button
-                            onClick={() => setSortOrder(prev => {
-                                if (prev === 'newest') return 'oldest';
-                                if (prev === 'oldest') return canSortByMatch ? 'match' : 'newest';
-                                return 'newest';
-                            })}
-                            className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-700 hover:border-slate-600 text-white rounded-full font-mono text-xs uppercase tracking-wider transition-colors whitespace-nowrap cursor-pointer"
+                            type="submit"
+                            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap cursor-pointer"
                         >
-                            {sortOrder === 'match' ? <Target size={15} className="text-cyan-400" /> : <ArrowUpDown size={15} className="text-cyan-400" />}
-                            <span>
-                                {sortOrder === 'newest' ? t('jobSearch.newestFirst') : sortOrder === 'oldest' ? t('jobSearch.oldestFirst') : t('jobSearch.bestMatch')}
-                            </span>
+                            {t('jobSearch.searchButton')}
                         </button>
-                    </div>
+                    </form>
 
-                    {/* Category Filter Pills */}
-                    <div className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 relative z-10 scrollbar-none">
-                        {TRADE_CATEGORIES.map((cat) => (
-                            <button
-                                key={cat.match}
-                                onClick={() => setSelectedCategory(cat.match)}
-                                className={`px-4 py-1.5 rounded-full font-mono text-xs uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                                    selectedCategory === cat.match
-                                        ? 'bg-cyan-500 text-slate-950 font-bold shadow-md'
-                                        : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-850 border border-slate-800'
-                                }`}
-                            >
-                                {t(cat.key)}
-                            </button>
-                        ))}
+                    {/* Filter dropdowns */}
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        <FilterSelect value={sortOrder} onChange={(v) => setSortOrder(v as typeof sortOrder)} ariaLabel={t('jobSearch.newestFirst')}>
+                            <option value="newest">{t('jobSearch.newestFirst')}</option>
+                            <option value="oldest">{t('jobSearch.oldestFirst')}</option>
+                            {canSortByMatch && <option value="match">{t('jobSearch.bestMatch')}</option>}
+                        </FilterSelect>
+
+                        <FilterSelect value={selectedCategory} onChange={setSelectedCategory} ariaLabel={t(TRADE_CATEGORIES[0].key)}>
+                            {TRADE_CATEGORIES.map((cat) => (
+                                <option key={cat.match} value={cat.match}>{t(cat.key)}</option>
+                            ))}
+                        </FilterSelect>
+
+                        <FilterSelect value={String(salaryFilter)} onChange={(v) => setSalaryFilter(Number(v))} ariaLabel={t('jobSearch.filterSalaryAny')}>
+                            <option value="0">{t('jobSearch.filterSalaryAny')}</option>
+                            <option value="30000">{t('jobSearch.filterSalary30k')}</option>
+                            <option value="50000">{t('jobSearch.filterSalary50k')}</option>
+                            <option value="70000">{t('jobSearch.filterSalary70k')}</option>
+                            <option value="100000">{t('jobSearch.filterSalary100k')}</option>
+                        </FilterSelect>
+
+                        <FilterSelect value={countryFilter} onChange={setCountryFilter} ariaLabel={t('jobSearch.filterCountryAny')}>
+                            <option value="">{t('jobSearch.filterCountryAny')}</option>
+                            {availableCountries.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </FilterSelect>
+
+                        <FilterSelect value={benefitsFilter} onChange={(v) => setBenefitsFilter(v as typeof benefitsFilter)} ariaLabel={t('jobSearch.filterBenefitsAny')}>
+                            <option value="any">{t('jobSearch.filterBenefitsAny')}</option>
+                            <option value="transport">{t('jobSearch.filterBenefitsTransport')}</option>
+                            <option value="housing">{t('jobSearch.filterBenefitsHousing')}</option>
+                            <option value="both">{t('jobSearch.filterBenefitsBoth')}</option>
+                        </FilterSelect>
                     </div>
                 </div>
 
-                {/* Search Meta Info + View Mode Toggle */}
+                {/* Results Meta Info + Sort/View Toggles */}
                 <div className="flex items-center justify-between mb-6 px-1 gap-3 flex-wrap">
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
                         {t('jobSearch.showingCount', { count: filteredJobs.length })}
                     </span>
                     <div className="flex items-center gap-3">
@@ -679,6 +787,30 @@ const JobSearchPage: React.FC = () => {
                                 {t('jobSearch.clearSearch')}
                             </button>
                         )}
+                        <div className="inline-flex items-center bg-slate-100 dark:bg-slate-900 rounded-full p-1">
+                            {canSortByMatch && (
+                                <button
+                                    onClick={() => setSortOrder('match')}
+                                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                        sortOrder === 'match'
+                                            ? 'bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-sm'
+                                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                                    }`}
+                                >
+                                    {t('jobSearch.sortRelevance')}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setSortOrder(prev => (prev === 'oldest' ? 'newest' : 'oldest'))}
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                    sortOrder === 'newest' || sortOrder === 'oldest'
+                                        ? 'bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-sm'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                                }`}
+                            >
+                                {t('jobSearch.sortDate')}
+                            </button>
+                        </div>
                         <div className="inline-flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full p-1 shadow-sm">
                             <button
                                 onClick={() => setViewMode('list')}
@@ -712,18 +844,19 @@ const JobSearchPage: React.FC = () => {
                     </div>
                 ) : filteredJobs.length > 0 ? (
                     viewMode === 'list' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredJobs.map((job, index) => (
+                        <div className="flex flex-col gap-4">
+                            {filteredJobs.map((job) => (
                                 <JobCard
                                     key={job.id}
                                     job={job}
-                                    index={index}
                                     onApply={handleApply}
                                     onViewJob={handleViewJob}
                                     onViewCompany={handleViewCompany}
                                     isApplying={applyingId === job.id}
                                     hasApplied={appliedJobIds.has(job.id)}
                                     matchPercent={jobMatches.get(job.id)?.percent}
+                                    isSaved={savedIds.has(job.id)}
+                                    onToggleSave={toggleSave}
                                 />
                             ))}
                         </div>

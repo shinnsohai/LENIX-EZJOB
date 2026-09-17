@@ -695,14 +695,14 @@ const HighVelocityRolesSection = () => {
         {
             title: t('homepage.role1Title'),
             desc: t('homepage.role1Desc'),
-            category: t('jobSearch.badgeImmediateStart'),
+            category: t('homepage.badgeImmediateStart'),
             rate: "$95 - $120 / hr",
             location: "Singapore CBD",
         },
         {
             title: t('homepage.role2Title'),
             desc: t('homepage.role2Desc'),
-            category: t('jobSearch.badgeHotRole'),
+            category: t('homepage.badgeHotRole'),
             rate: "$65 - $80 / hr",
             location: "Jurong Island, SG",
         },
