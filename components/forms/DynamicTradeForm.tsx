@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { SECTORS, Sector, Category } from '../../data/tradeCategories';
+import { SECTORS, Sector, Category, Trade } from '../../data/tradeCategories';
 import { UserSkill, TradeSpecifics } from '../../types';
-import { Plus, Trash2, Star, CheckCircle2, BadgeCheck } from 'lucide-react';
+import { Plus, Trash2, Star, CheckCircle2, X } from 'lucide-react';
 
 interface DynamicTradeFormProps {
     skills: UserSkill[];
@@ -11,6 +11,23 @@ interface DynamicTradeFormProps {
 
 // Reasonable ceiling on how many trades a single profile can list.
 const MAX_SKILLS = 10;
+// Same ceiling logic for tags on a single trade — generous, but not unbounded.
+const MAX_TAGS_PER_SKILL = 20;
+
+/** Looks up a trade's predefined skill-tag catalog by name, searching every
+ * sector/category. Worker-added trades always come from this catalog, but a
+ * trade added before a catalog update (or one that's since been removed)
+ * can end up with no match — callers fall back to custom-tag-only in that
+ * case rather than failing. */
+function findTradeDefinition(tradeName: string): Trade | undefined {
+    for (const sector of SECTORS) {
+        for (const category of sector.categories) {
+            const trade = category.trades.find(t => t.name === tradeName);
+            if (trade) return trade;
+        }
+    }
+    return undefined;
+}
 
 export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTradeFormProps) {
     // If no skills exist, default to adding mode
@@ -22,6 +39,13 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
     const [tempTrade, setTempTrade] = useState<string>('');
     const [tempTags, setTempTags] = useState<TradeSpecifics>({});
     const [formError, setFormError] = useState<string | null>(null);
+    // New-skill custom tag input (Step 4, alongside the predefined catalog).
+    const [customTagDraft, setCustomTagDraft] = useState('');
+
+    // Editing tags on an already-added skill: which card's "add tag" panel
+    // is open, plus its own custom-tag text input.
+    const [editingTagsIndex, setEditingTagsIndex] = useState<number | null>(null);
+    const [editCustomTagDraft, setEditCustomTagDraft] = useState('');
 
     // Helper to find trade object definition based on tempTrade name
     const currentTradeObj = useMemo(() => {
@@ -59,6 +83,7 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
         setActiveCategory(null);
         setTempTrade('');
         setTempTags({});
+        setCustomTagDraft('');
         setFormError(null);
     };
 
@@ -72,6 +97,9 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
         }
         
         onSkillsChange(newSkills);
+        // Indices shift on removal — close any open "add tag" panel rather
+        // than risk it pointing at the wrong card afterward.
+        setEditingTagsIndex(null);
         // If list is empty, show add form again
         if (newSkills.length === 0) setIsAdding(true);
     };
@@ -91,13 +119,49 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
         }));
     };
 
+    const handleAddCustomDraftTag = () => {
+        const trimmed = customTagDraft.trim();
+        if (!trimmed) return;
+        setTempTags(prev => ({ ...prev, [trimmed]: true }));
+        setCustomTagDraft('');
+    };
+
+    // Adds or removes one tag on an already-added skill card. Setting the
+    // value explicitly (rather than toggling) means adding a custom tag
+    // that happens to match an already-selected predefined one's name is a
+    // safe no-op instead of accidentally removing it.
+    const handleSetExistingTag = (skillIndex: number, tag: string, value: boolean) => {
+        const newSkills = skills.map((s, i) => {
+            if (i !== skillIndex) return s;
+            const newTags = { ...s.tags };
+            if (value) newTags[tag] = true; else delete newTags[tag];
+            return { ...s, tags: newTags };
+        });
+        onSkillsChange(newSkills);
+    };
+
+    const handleAddCustomTagToExisting = (skillIndex: number) => {
+        const trimmed = editCustomTagDraft.trim();
+        if (!trimmed) return;
+        const activeTagCount = Object.values(skills[skillIndex].tags).filter(Boolean).length;
+        if (activeTagCount >= MAX_TAGS_PER_SKILL) return;
+        handleSetExistingTag(skillIndex, trimmed, true);
+        setEditCustomTagDraft('');
+    };
+
     return (
         <div className="space-y-8">
             
             {/* --- List of Selected Skills (Card Stack Logic) --- */}
             {skills.length > 0 && (
                 <div className="space-y-4">
-                    {skills.map((skill, idx) => (
+                    {skills.map((skill, idx) => {
+                        const tradeDef = findTradeDefinition(skill.trade);
+                        const activeTags = Object.entries(skill.tags).filter(([, v]) => v).map(([tag]) => tag);
+                        const availablePredefinedTags = (tradeDef?.skills ?? []).filter(t => !skill.tags[t]);
+                        const isEditingTags = editingTagsIndex === idx;
+
+                        return (
                         <div
                             key={skill.trade}
                             className={`relative p-5 rounded-xl border-2 transition-all ${
@@ -107,7 +171,7 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
                             }`}
                         >
                             <div className="flex justify-between items-start mb-3">
-                                <div>
+                                <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <h3 className="font-bold text-lg text-slate-800 dark:text-white">{skill.trade}</h3>
                                         {skill.isPrimary ? (
@@ -121,13 +185,79 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
                                         )}
                                     </div>
                                     <div className="flex flex-wrap gap-2 mt-2">
-                                        {Object.entries(skill.tags).filter(([_, v]) => v).map(([tag]) => (
-                                            <span key={tag} className="text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300">
+                                        {activeTags.map(tag => (
+                                            <span
+                                                key={tag}
+                                                className="flex items-center gap-1 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 pl-2 pr-1 py-1 rounded text-slate-600 dark:text-slate-300"
+                                            >
                                                 {tag}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSetExistingTag(idx, tag, false)}
+                                                    className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-0.5 rounded-full"
+                                                    aria-label={`Remove ${tag} skill tag`}
+                                                >
+                                                    <X size={12} aria-hidden="true" />
+                                                </button>
                                             </span>
                                         ))}
-                                        {Object.keys(skill.tags).length === 0 && <span className="text-xs text-slate-400 dark:text-slate-500 italic">No specific tags selected</span>}
+                                        {activeTags.length === 0 && !isEditingTags && (
+                                            <span className="text-xs text-slate-400 dark:text-slate-500 italic">No specific tags selected</span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingTagsIndex(isEditingTags ? null : idx);
+                                                setEditCustomTagDraft('');
+                                            }}
+                                            className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 border border-dashed border-emerald-300 dark:border-emerald-800 px-2 py-1 rounded flex items-center gap-1"
+                                        >
+                                            <Plus size={12} /> {isEditingTags ? 'Done' : 'Add Skill Tag'}
+                                        </button>
                                     </div>
+
+                                    {isEditingTags && (
+                                        <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-950/50 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3">
+                                            {availablePredefinedTags.length > 0 && (
+                                                <div>
+                                                    <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Suggested for {skill.trade}</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {availablePredefinedTags.map(tag => (
+                                                            <button
+                                                                key={tag}
+                                                                type="button"
+                                                                onClick={() => handleSetExistingTag(idx, tag, true)}
+                                                                className="text-xs px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-400 bg-white dark:bg-slate-900"
+                                                            >
+                                                                + {tag}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Or add your own</p>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={editCustomTagDraft}
+                                                        onChange={e => setEditCustomTagDraft(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTagToExisting(idx); } }}
+                                                        placeholder="e.g. Forklift Licence (Class 3)"
+                                                        className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAddCustomTagToExisting(idx)}
+                                                        disabled={!editCustomTagDraft.trim()}
+                                                        className="px-4 py-2 text-sm font-bold rounded-lg bg-slate-900 dark:bg-emerald-600 text-white hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center gap-2">
@@ -150,7 +280,8 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
                                 </div>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -281,6 +412,44 @@ export default function DynamicTradeForm({ skills, onSkillsChange }: DynamicTrad
                                             {skill}
                                         </label>
                                     ))}
+                                    {Object.keys(tempTags).filter(t => tempTags[t] && !currentTradeObj.skills.includes(t)).map(customTag => (
+                                        <span
+                                            key={customTag}
+                                            className="flex items-center gap-1 px-3 py-2 rounded-md border border-emerald-500 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500 text-xs font-medium"
+                                        >
+                                            {customTag}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleTagToggle(customTag)}
+                                                className="text-emerald-500 hover:text-red-500 p-0.5 rounded-full"
+                                                aria-label={`Remove ${customTag} skill tag`}
+                                            >
+                                                <X size={12} aria-hidden="true" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                                    <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">Don't see your skill? Add your own</p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={customTagDraft}
+                                            onChange={e => setCustomTagDraft(e.target.value)}
+                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomDraftTag(); } }}
+                                            placeholder="e.g. Forklift Licence (Class 3)"
+                                            className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleAddCustomDraftTag}
+                                            disabled={!customTagDraft.trim()}
+                                            className="px-4 py-2 text-sm font-bold rounded-lg bg-slate-900 dark:bg-emerald-600 text-white hover:bg-slate-800 dark:hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
