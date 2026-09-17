@@ -18,11 +18,14 @@ import {
     getJobApplicants,
     updateApplicationStatus,
     getApplicantCounts,
+    getEmployerApplicationsSummary,
+    type EmployerApplicationRecord,
 } from '../services/db';
 import Spinner from '../components/Spinner';
 import { countries, Country } from '../data/countries';
 import { getCurrencyForCountry, formatSalaryRange } from '../data/currencies';
 import { TRANSLATION_LANGUAGES } from '../data/languages';
+import { computeSkillMatch, flattenWorkerSkills } from '../utils/jobMatch';
 
 type View = 'DASHBOARD' | 'NEW_JOB' | 'EDIT_JOB' | 'APPLICANTS';
 type JobStatus = 'Active' | 'On Hold' | 'Closed';
@@ -350,12 +353,126 @@ const SearchWorkersPanel: React.FC = () => {
     );
 };
 
+const APPLICANT_STATUS_ORDER: Application['status'][] = ['Submitted', 'Viewed', 'Shortlisted', 'Hired', 'Rejected'];
+
+const APPLICANT_STATUS_STYLE: Record<string, { bar: string; label: string }> = {
+    Submitted: { bar: 'bg-slate-400', label: 'text-slate-600' },
+    Viewed: { bar: 'bg-cyan-500', label: 'text-slate-600' },
+    Shortlisted: { bar: 'bg-blue-500', label: 'text-slate-600' },
+    Hired: { bar: 'bg-emerald-500', label: 'text-slate-600' },
+    Rejected: { bar: 'bg-red-500', label: 'text-slate-600' },
+};
+
+/** Horizontal bar chart of applicant counts by status — real data from
+ * applicationsSummary (see services/db.ts's getEmployerApplicationsSummary),
+ * not a decorative placeholder. Each bar carries its own status name as a
+ * direct text label (never color alone for identity), which doubles as its
+ * own legend, so there's no separate legend box for a single-series chart
+ * like this. Track is a full pill; the fill is square at the baseline (left)
+ * and rounded only at the data end (right), per the usual bar-chart mark spec. */
+const ApplicantStatusChart: React.FC<{ counts: { status: Application['status']; count: number }[] }> = ({ counts }) => {
+    const max = Math.max(1, ...counts.map(c => c.count));
+    const total = counts.reduce((sum, c) => sum + c.count, 0);
+
+    if (total === 0) {
+        return (
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col items-center justify-center text-center min-h-[220px]">
+                <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">bar_chart</span>
+                <p className="text-sm text-slate-500">No applicants yet — status breakdown will appear here once candidates start applying.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
+            <h3 className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Applicant Pipeline</h3>
+            <p className="text-xs text-slate-400 mb-5">{total} total applicant{total === 1 ? '' : 's'} across all requisitions</p>
+            <div className="space-y-3">
+                {counts.map(({ status, count }) => {
+                    const style = APPLICANT_STATUS_STYLE[status] ?? APPLICANT_STATUS_STYLE.Submitted;
+                    const widthPct = count > 0 ? Math.max((count / max) * 100, 4) : 0;
+                    return (
+                        <div key={status} className="flex items-center gap-3" title={`${status}: ${count}`}>
+                            <span className={`w-20 flex-shrink-0 text-xs font-mono font-semibold ${style.label}`}>{status}</span>
+                            <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+                                {count > 0 && (
+                                    <div
+                                        className={`h-full rounded-r-full ${style.bar} transition-[width] duration-500`}
+                                        style={{ width: `${widthPct}%` }}
+                                    />
+                                )}
+                            </div>
+                            <span className="w-8 flex-shrink-0 text-right text-xs font-mono font-bold text-slate-700">{count}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+/** Vertical bar chart of applications received per day over the last 14
+ * days — bucketed client-side from the same real applicationsSummary by
+ * appliedAt's calendar date. Direct labels are selective (first/peak/last
+ * only, per "never a number on every point") — every other day's exact
+ * count rides the native title-attribute tooltip on hover instead. */
+const ApplicationsTrendChart: React.FC<{ daily: { date: Date; count: number }[] }> = ({ daily }) => {
+    const max = Math.max(1, ...daily.map(d => d.count));
+    const total = daily.reduce((sum, d) => sum + d.count, 0);
+    const peakIndex = daily.reduce((best, d, i) => (d.count > daily[best].count ? i : best), 0);
+
+    if (total === 0) {
+        return (
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full flex flex-col items-center justify-center text-center min-h-[220px]">
+                <span className="material-symbols-outlined text-3xl text-slate-300 mb-2">show_chart</span>
+                <p className="text-sm text-slate-500">No applications in the last 14 days yet.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
+            <h3 className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold mb-1">Applications — Last 14 Days</h3>
+            <p className="text-xs text-slate-400 mb-5">{total} application{total === 1 ? '' : 's'} received</p>
+            <div className="flex items-end gap-1.5 h-32">
+                {daily.map((d, i) => {
+                    const heightPct = d.count === 0 ? 2 : Math.max((d.count / max) * 100, 8);
+                    const isLabeled = d.count > 0 && (i === 0 || i === daily.length - 1 || i === peakIndex);
+                    return (
+                        <div
+                            key={i}
+                            className="flex-1 flex flex-col items-center justify-end h-full"
+                            title={`${d.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}: ${d.count} application${d.count === 1 ? '' : 's'}`}
+                        >
+                            {isLabeled && (
+                                <span className="text-[10px] font-mono font-bold text-slate-600 mb-1">{d.count}</span>
+                            )}
+                            <div
+                                className="w-full max-w-[18px] rounded-t-md bg-cyan-500 hover:bg-cyan-600 transition-colors"
+                                style={{ height: `${heightPct}%` }}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="flex justify-between mt-2 text-[10px] font-mono text-slate-400">
+                <span>{daily[0].date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                <span>{daily[daily.length - 1].date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+            </div>
+        </div>
+    );
+};
+
 const EmployerDashboard: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [view, setView] = useState<View>('DASHBOARD');
     const [jobs, setJobs] = useState<Job[]>([]);
     const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
+    // Powers the dashboard's real metrics/charts (see the Dashboard view
+    // below) — every application across this employer's jobs, each with a
+    // status, timestamp, and the applicant's flattened skills.
+    const [applicationsSummary, setApplicationsSummary] = useState<EmployerApplicationRecord[]>([]);
     const [workers, setWorkers] = useState<WorkerProfile[]>([]);
     // Maps worker user_id -> {applicationId, status} for the job currently
     // being viewed in the Applicants tab. getJobApplicants only returns
@@ -431,7 +548,9 @@ const EmployerDashboard: React.FC = () => {
                         const jobsData = await getJobs({ employerId: user.id });
                         console.log("Jobs loaded in Dashboard:", jobsData.length);
                         setJobs(jobsData);
-                        setApplicantCounts(await getApplicantCounts(jobsData.map(j => j.id)));
+                        const jobIds = jobsData.map(j => j.id);
+                        setApplicantCounts(await getApplicantCounts(jobIds));
+                        setApplicationsSummary(await getEmployerApplicationsSummary(jobIds));
                     }
                 } catch (err: any) {
                     console.error("Failed to load dashboard data:", err);
@@ -1482,6 +1601,54 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
         );
     };
 
+    // --- Dashboard metrics & charts — computed from real jobs/applications
+    // state (loaded in the effect above), not the hardcoded placeholder
+    // numbers the bento grid used to show. Recomputed each render rather
+    // than memoized: employer-scale data (a handful of jobs/applicants),
+    // not worth the extra hook.
+    const totalApplicants = applicationsSummary.length;
+
+    const positionsTrackedJobs = jobs.filter(j => j.available_positions !== undefined);
+    const positionsFilled = positionsTrackedJobs.reduce((sum, j) => sum + (j.positions_filled ?? 0), 0);
+    const positionsAvailable = positionsTrackedJobs.reduce((sum, j) => sum + (j.available_positions ?? 0), 0);
+
+    const jobsById = new Map(jobs.map(j => [j.id, j]));
+    const matchPercents = applicationsSummary
+        .map(app => {
+            const job = jobsById.get(app.job_id);
+            if (!job) return null;
+            return computeSkillMatch(job.required_skills, flattenWorkerSkills({ skills: app.workerSkills })).percent;
+        })
+        .filter((p): p is number => p !== null);
+    const avgMatchRate = matchPercents.length > 0
+        ? Math.round(matchPercents.reduce((sum, p) => sum + p, 0) / matchPercents.length)
+        : null;
+
+    const statusCounts = APPLICANT_STATUS_ORDER.map(status => ({
+        status,
+        count: applicationsSummary.filter(a => a.status === status).length,
+    }));
+
+    // Local calendar-day key (YYYY-MM-DD) — deliberately not toISOString(),
+    // which reports the UTC date and silently shifts every bucket by a day
+    // in any timezone ahead of UTC (local midnight in UTC+8 serializes to
+    // the previous day in UTC), dropping applications from the count they
+    // actually belong to. Both the bucket keys and each application's own
+    // appliedAt are run through this same function, so they compare on
+    // the viewer's local calendar day — what "today" actually means to the
+    // employer looking at the chart.
+    const toLocalDayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    const TREND_DAYS = 14;
+    const dailyTrend = Array.from({ length: TREND_DAYS }, (_, i) => {
+        const date = new Date();
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() - (TREND_DAYS - 1 - i));
+        const dayKey = toLocalDayKey(date);
+        const count = applicationsSummary.filter(a => a.appliedAt && toLocalDayKey(new Date(a.appliedAt)) === dayKey).length;
+        return { date, count };
+    });
+
     const renderContent = () => {
         switch (view) {
             case 'NEW_JOB':
@@ -1852,42 +2019,64 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                 </div>
                             </div>
 
-                            {/* Metric 2: Candidates */}
+                            {/* Metric 2: Total Applicants — real count across every
+                                job (applicationsSummary), Withdrawn excluded. */}
                             <div className="bg-gradient-to-tr from-cyan-900/40 to-slate-900 text-white p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-sm border border-cyan-800/40">
                                 <div className="flex justify-between items-start">
-                                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">Pipeline Reach</span>
+                                    <span className="font-mono text-xs uppercase tracking-widest text-cyan-300 font-bold">Total Applicants</span>
                                     <span className="material-symbols-outlined text-cyan-300 text-[20px]">groups</span>
                                 </div>
                                 <div className="flex items-baseline gap-3 mt-4">
-                                    <span className="text-3xl font-extrabold text-white font-mono">1,240+</span>
-                                    <span className="text-xs text-emerald-400 font-mono font-bold">+18% MoM</span>
+                                    <span className="text-3xl font-extrabold text-white font-mono">{totalApplicants.toLocaleString()}</span>
+                                    <span className="text-xs text-cyan-200 font-mono">across {jobs.length} role{jobs.length === 1 ? '' : 's'}</span>
                                 </div>
                             </div>
 
-                            {/* Metric 3: Time to Hire */}
+                            {/* Metric 3: Positions Filled — from jobs.positions_filled
+                                / available_positions (server-maintained by a DB
+                                trigger on Hire), only counting jobs that actually
+                                track a headcount. */}
                             <div className="bg-white p-6 rounded-2xl flex flex-col justify-between shadow-sm border border-slate-200">
                                 <div className="flex justify-between items-start">
-                                    <span className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold">Avg. Placement</span>
-                                    <span className="material-symbols-outlined text-slate-400 text-[20px]">timer</span>
+                                    <span className="font-mono text-xs uppercase tracking-widest text-slate-500 font-bold">Positions Filled</span>
+                                    <span className="material-symbols-outlined text-slate-400 text-[20px]">task_alt</span>
                                 </div>
                                 <div className="flex items-baseline gap-2 mt-4">
-                                    <span className="text-3xl font-extrabold text-slate-900 font-mono">24</span>
-                                    <span className="text-sm font-semibold text-slate-500">hours</span>
-                                    <span className="text-xs text-cyan-600 font-mono font-bold ml-auto">98% Faster</span>
+                                    {positionsTrackedJobs.length > 0 ? (
+                                        <>
+                                            <span className="text-3xl font-extrabold text-slate-900 font-mono">{positionsFilled}</span>
+                                            <span className="text-sm font-semibold text-slate-500">/ {positionsAvailable}</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-lg font-semibold text-slate-400">Not tracked yet</span>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Metric 4: AI Match Rate */}
+                            {/* Metric 4: Avg. Skill Match — computed live from every
+                                current applicant's Skill Passport vs. their job's
+                                required_skills (see utils/jobMatch.ts, the same
+                                algorithm behind the worker-facing match badge). */}
                             <div className="bg-gradient-to-tr from-fuchsia-950/40 to-slate-900 text-white p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden shadow-sm border border-fuchsia-800/40">
                                 <div className="flex justify-between items-start">
-                                    <span className="font-mono text-xs uppercase tracking-widest text-fuchsia-400 font-bold">AI Match Rate</span>
+                                    <span className="font-mono text-xs uppercase tracking-widest text-fuchsia-400 font-bold">Avg. Skill Match</span>
                                     <span className="material-symbols-outlined text-fuchsia-400 text-[20px]">auto_awesome</span>
                                 </div>
                                 <div className="flex items-baseline gap-3 mt-4">
-                                    <span className="text-3xl font-extrabold text-white font-mono">94%</span>
-                                    <span className="text-xs text-fuchsia-300 font-mono">Precision Match</span>
+                                    <span className="text-3xl font-extrabold text-white font-mono">{avgMatchRate !== null ? `${avgMatchRate}%` : '—'}</span>
+                                    <span className="text-xs text-fuchsia-300 font-mono">
+                                        {matchPercents.length > 0 ? `${matchPercents.length} applicant${matchPercents.length === 1 ? '' : 's'}` : 'No applicants yet'}
+                                    </span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Charts — real data from applicationsSummary, not
+                            decorative placeholders (see the two components above
+                            EmployerDashboard). */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <ApplicationsTrendChart daily={dailyTrend} />
+                            <ApplicantStatusChart counts={statusCounts} />
                         </div>
 
                         {/* AI Job Studio Promo Banner */}

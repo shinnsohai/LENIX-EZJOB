@@ -8,6 +8,7 @@ import type {
     Certification,
     Reference,
     BlogPost,
+    UserSkill,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -431,6 +432,51 @@ export const getApplicantCounts = async (jobIds: string[]): Promise<Record<strin
     const counts: Record<string, number> = {};
     (data ?? []).forEach((row: any) => { counts[row.job_id] = (counts[row.job_id] ?? 0) + 1; });
     return counts;
+};
+
+export interface EmployerApplicationRecord {
+    job_id: string;
+    worker_id: string;
+    status: Application['status'];
+    appliedAt: string;
+    workerSkills: UserSkill[];
+}
+
+/**
+ * Every application across an employer's jobs, each carrying its status,
+ * timestamp, and the applicant's flattened skills — enough for the
+ * dashboard to compute real totals, a status breakdown, an applications-
+ * over-time trend, and a skill-match average (see utils/jobMatch.ts)
+ * without fetching full WorkerProfile records it doesn't need. Same
+ * two-query shape as getJobApplicants (applications and worker_profiles
+ * don't share a direct FK to embed in one PostgREST call), just across
+ * every job at once instead of one.
+ */
+export const getEmployerApplicationsSummary = async (jobIds: string[]): Promise<EmployerApplicationRecord[]> => {
+    if (jobIds.length === 0) return [];
+    const { data: apps, error: appsError } = await supabase
+        .from('applications')
+        .select('job_id, worker_id, status, applied_at')
+        .in('job_id', jobIds)
+        .neq('status', 'Withdrawn');
+    if (appsError) { console.error('Error fetching employer applications summary:', appsError); return []; }
+    if (!apps || apps.length === 0) return [];
+
+    const workerIds = Array.from(new Set(apps.map((a: any) => a.worker_id)));
+    const { data: workers, error: workersError } = await supabase
+        .from('worker_profiles')
+        .select('user_id, skills')
+        .in('user_id', workerIds);
+    if (workersError) console.error('Error fetching applicant skills for summary:', workersError);
+
+    const skillsByUserId = new Map((workers ?? []).map((w: any) => [w.user_id, (w.skills ?? []) as UserSkill[]]));
+    return apps.map((a: any) => ({
+        job_id: a.job_id,
+        worker_id: a.worker_id,
+        status: a.status as Application['status'],
+        appliedAt: a.applied_at,
+        workerSkills: skillsByUserId.get(a.worker_id) ?? [],
+    }));
 };
 
 // ---------------------------------------------------------------------------
