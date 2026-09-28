@@ -54,7 +54,7 @@ export default {
             fontFamily: {
                 sans: ['Inter', 'sans-serif'],
                 mono: ['JetBrains Mono', 'monospace'],
-                display: ['Inter', 'sans-serif'],
+                display: ['Outfit', 'Inter', 'sans-serif'],
                 label: ['JetBrains Mono', 'monospace'],
             },
         },

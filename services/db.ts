@@ -10,6 +10,7 @@ import type {
     BlogPost,
     UserSkill,
     Notification,
+    CompanyPageContent,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +207,86 @@ export const saveEmployerProfile = async (profile: EmployerProfile): Promise<voi
 export const deleteEmployerProfile = async (id: string): Promise<void> => {
     const { error } = await supabase.from('employer_profiles').delete().eq('id', id);
     if (error) throw error;
+};
+
+/**
+ * Admin edit of an existing employer's basic facts. A plain UPDATE rather
+ * than saveEmployerProfile's upsert: an upsert also runs the table's INSERT
+ * policy (owner-only), which an admin editing someone else's row fails.
+ */
+export const updateEmployerBasics = async (userId: string, fields: Partial<EmployerProfile>): Promise<void> => {
+    const { id, user_id, created_at, updated_at, ...rest } = fields as any;
+    const { error } = await supabase.from('employer_profiles').update(rest).eq('user_id', userId);
+    if (error) throw error;
+};
+
+// ---------------------------------------------------------------------------
+// Company showcase pages — admin-curated content in site_content, keyed by
+// the employer's user id (see CompanyPageContent in types.ts).
+// ---------------------------------------------------------------------------
+
+const COMPANY_PAGE_PREFIX = 'company_page:';
+
+export const getCompanyPage = async (userId: string): Promise<CompanyPageContent | null> => {
+    const { data, error } = await supabase
+        .from('site_content')
+        .select('data')
+        .eq('id', `${COMPANY_PAGE_PREFIX}${userId}`)
+        .maybeSingle();
+    if (error) { console.error('Error loading company page:', error); return null; }
+    return (data?.data as CompanyPageContent) ?? null;
+};
+
+export const getCompanyPageBySlug = async (slug: string): Promise<{ userId: string; content: CompanyPageContent } | null> => {
+    const { data, error } = await supabase
+        .from('site_content')
+        .select('id, data')
+        .like('id', `${COMPANY_PAGE_PREFIX}%`)
+        .eq('data->>slug', slug)
+        .limit(1)
+        .maybeSingle();
+    if (error) { console.error('Error loading company page by slug:', error); return null; }
+    if (!data) return null;
+    return { userId: data.id.slice(COMPANY_PAGE_PREFIX.length), content: data.data as CompanyPageContent };
+};
+
+/** Slugs aren't DB-unique (they live inside jsonb), so the admin editor checks before saving. */
+export const isCompanySlugTaken = async (slug: string, exceptUserId: string): Promise<boolean> => {
+    const existing = await getCompanyPageBySlug(slug);
+    return !!existing && existing.userId !== exceptUserId;
+};
+
+export const saveCompanyPage = async (userId: string, content: CompanyPageContent): Promise<void> => {
+    const { error } = await supabase
+        .from('site_content')
+        .upsert({ id: `${COMPANY_PAGE_PREFIX}${userId}`, data: content, updated_at: new Date().toISOString() });
+    if (error) throw error;
+};
+
+/**
+ * Creates a new employer login + company profile. Needs the service-role key
+ * (auth.users can't be created from the browser), so it goes through the
+ * admin-verified /api/admin/create-company function.
+ */
+export const createCompanyAccount = async (input: {
+    email: string;
+    company_name: string;
+    industry?: string;
+    website_url?: string;
+    phone?: string;
+}): Promise<{ userId: string }> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Not authenticated.');
+
+    const res = await fetch('/api/admin/create-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(input),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error ?? 'Failed to create company.');
+    return { userId: body.userId };
 };
 
 // ---------------------------------------------------------------------------

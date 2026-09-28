@@ -131,6 +131,31 @@
     }
 }
 
+/* Company showcase talent marquee — a scoped, documented exception to the
+   "one approved keyframe" rule (see design-system.md, Motion section). The
+   track renders its list twice, so translating -50% -> 0 scrolls right and
+   loops seamlessly. Pauses on hover so a card's testimonial can be read;
+   under prefers-reduced-motion the animation is off and the row scrolls by
+   hand instead. */
+@keyframes company-marquee-right {
+    from { transform: translateX(-50%); }
+    to { transform: translateX(0); }
+}
+
+.company-marquee-track {
+    animation: company-marquee-right 45s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .company-marquee-track {
+        animation: none;
+    }
+
+    .company-marquee-viewport {
+        overflow-x: auto;
+    }
+}
+
 /* Services / Solutions illustration system — a scoped, documented exception
    to the "one approved keyframe" rule (see design-system.md, Motion
    section). Each scene is one AI-generated illustration split into a

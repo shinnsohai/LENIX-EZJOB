@@ -7,9 +7,10 @@ import { useToast } from '../contexts/ToastContext';
 import { getAllWorkers, getAllEmployers, saveWorkerProfile, saveEmployerProfile, deleteUserAccount, uploadFile } from '../services/db';
 import type { HomepageContent, SiteAssets, Testimonial, FAQ, AboutPageContent, ContactPageContent, CareersPageContent } from '../contexts/SiteContentContext';
 import Spinner from '../components/Spinner';
+import CompanyPagesManager from '../components/admin/CompanyPagesManager';
 
 
-type AdminView = 'DASHBOARD' | 'FRONTPAGE_CONTENT' | 'QUICK_LINKS' | 'LEGAL_PAGES' | 'SITE_ASSETS' | 'WORKER_MANAGEMENT' | 'EMPLOYER_MANAGEMENT' | 'BLOG_MANAGEMENT';
+type AdminView = 'DASHBOARD' | 'FRONTPAGE_CONTENT' | 'QUICK_LINKS' | 'LEGAL_PAGES' | 'SITE_ASSETS' | 'WORKER_MANAGEMENT' | 'EMPLOYER_MANAGEMENT' | 'BLOG_MANAGEMENT' | 'COMPANY_PAGES';
 type ModalMode = 'CREATE' | 'EDIT' | 'VIEW';
 
 const SiteAssetsManager: React.FC = () => {
@@ -956,6 +957,7 @@ const AdminDashboard: React.FC = () => {
             <DashboardCard title="Blog Management" description="Publish, edit, and moderate industry trade articles." icon="edit_note" onClick={() => setView('BLOG_MANAGEMENT')} />
             <DashboardCard title="Worker Management" description="Audit Skill Passports, verify credentials, and manage status." icon="engineering" onClick={() => setView('WORKER_MANAGEMENT')} />
             <DashboardCard title="Employer Management" description="Manage enterprise employers, requisitions, and company profiles." icon="apartment" onClick={() => setView('EMPLOYER_MANAGEMENT')} />
+            <DashboardCard title="Company Pages" description="Create companies and curate their public pages: intro, capabilities, open roles, and talent testimonials." icon="storefront" onClick={() => setView('COMPANY_PAGES')} />
             <DashboardCard title="Quick Links & Nav" description="Configure footer compliance links and navigation structure." icon="link" onClick={() => setView('QUICK_LINKS')} />
             <DashboardCard title="Legal & Compliance" description="Update Privacy Policy, Terms of Service, and trade compliance rules." icon="gavel" onClick={() => setView('LEGAL_PAGES')} />
         </div>
@@ -1115,6 +1117,7 @@ const AdminDashboard: React.FC = () => {
             case 'BLOG_MANAGEMENT': return renderBlogManager();
             case 'LEGAL_PAGES': return <LegalPagesManager initialContent={legalPagesContent} onSave={updateLegalPagesContent} />;
             case 'QUICK_LINKS': return <QuickLinksAndPagesManager />;
+            case 'COMPANY_PAGES': return <CompanyPagesManager />;
             case 'DASHBOARD':
             default:
                 return renderDashboard();

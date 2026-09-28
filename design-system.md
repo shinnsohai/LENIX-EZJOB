@@ -30,7 +30,8 @@ verify by inspecting a class name or a computed style, not a judgment call.
 
 ## Typography
 
-- **Sans / display**: Inter (`font-sans`, `font-display`)
+- **Sans**: Inter (`font-sans`)
+- **Display**: Outfit (`font-display`, falls back to Inter) — approved for the company showcase page (`pages/CompanyProfilePage.tsx`, `components/company/*`) per the client's page spec; `font-display` was unused before, so no other page changed. Use elsewhere only with an explicit approval and doc update.
 - **Mono / label**: JetBrains Mono (`font-mono`, `font-label`) — used for eyebrows, badges, technical/data labels, and form labels throughout the app (this is a distinctive, load-bearing convention, not incidental)
 - Serif: not used anywhere in the system. Introducing one is a system violation.
 
@@ -46,6 +47,7 @@ verify by inspecting a class name or a computed style, not a judgment call.
 - Must be wrapped in `@media (prefers-reduced-motion: no-preference)` — it already is at the CSS level; components should not re-implement their own reduced-motion gate for this specific utility.
 - No JS animation library in the dependency tree (no Motion/Framer Motion, no GSAP) — animation is CSS-only or native `IntersectionObserver` (see `hooks/useInView.ts`, shared by `HomePage.tsx`, `ServicesPage.tsx`, and `SolutionsPage.tsx`). Adding an animation library is a system violation unless explicitly approved.
 - **Explicit, scoped exception — Services/Solutions illustration system.** `ServicesPage.tsx`/`SolutionsPage.tsx` use 9 additional CSS keyframes (`layer-shield-stamp`, `layer-toggle`, `layer-card-fan`, `layer-route-draw`, `layer-match-found`, `layer-zone-rise`, `layer-source-shrink`/`layer-split-document`, `layer-ring-draw`, `layer-badge-tick`, `layer-spark` — see the "Services / Solutions illustration system" comment block in `index.css`) to animate a commissioned set of AI-generated illustrations via the "layered sprite" technique (one static base image plus clip-path-isolated copies of the same image, each animated independently). This is still CSS-only/`IntersectionObserver`-only — no JS animation library — but it exceeds the "one approved keyframe" rule above. Approved for, and scoped strictly to, these two pages; still not permitted anywhere else without an equally explicit approval and doc update. Uses a blanket `@media (prefers-reduced-motion: reduce) { animation-delay: 0ms !important; animation-duration: 1ms !important; }` override (a different, equally valid pattern from `.animate-fade-in-up`'s "gate the keyframe definition itself" approach) rather than being forced into that exact alternate pattern.
+- **Explicit, scoped exception — company showcase page.** `components/company/CompanyHero.tsx` and `TalentMarquee.tsx` use the `motion` library (`motion/react`) for the hero entrance, the glowing company-name box, and the talent hover testimonial, plus one CSS keyframe (`company-marquee-right`, see its comment in `index.css`) for the infinite talent strip — both per the client's page spec. Scoped to that page; the page is lazy-loaded, so no other route pays for the library. Reduced motion: Motion's `useReducedMotion()` drops the entrance/glow/shimmer loops, and the marquee's keyframe is disabled (the strip scrolls by hand instead).
 
 ## Layout primitives
 

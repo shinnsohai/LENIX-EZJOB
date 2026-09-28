@@ -97,6 +97,7 @@ function App() {
                                         <Route path="/jobs" element={<JobSearchPage />} />
                                         <Route path="/jobs/:id" element={<JobDetailPage />} />
                                         <Route path="/employer/profile/:id" element={<CompanyProfilePage />} />
+                                        <Route path="/company/:slug" element={<CompanyProfilePage />} />
 
                                         {/* Static & Legal Pages */}
                                         <Route path="/about" element={<AboutUsPage />} />

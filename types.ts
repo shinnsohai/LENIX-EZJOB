@@ -114,6 +114,29 @@ export interface EmployerProfile {
     status?: 'Active' | 'Suspended';
 }
 
+/**
+ * Admin-curated public showcase page for a hiring company, stored in
+ * site_content under id `company_page:<employer user_id>` (admin-write,
+ * public-read). Basic company facts (name, logo, industry, size, website,
+ * phone, description) stay on EmployerProfile; this holds everything the
+ * public page adds on top.
+ */
+export interface CompanyPageContent {
+    slug?: string;
+    tagline?: string;
+    address?: string;
+    email?: string;
+    linkedin_url?: string;
+    facebook_url?: string;
+    instagram_url?: string;
+    hero_video_url?: string;
+    stats?: { value: string; label: string }[];
+    capabilities?: { title: string; description: string }[];
+    sectors?: { title: string; description: string; focus?: string }[];
+    projects?: { title: string; sector: string; summary: string }[];
+    talents?: { name: string; role: string; avatar_url?: string; testimonial: string; rating?: number }[];
+}
+
 export interface Job {
     id: string;
     employer_id: string;

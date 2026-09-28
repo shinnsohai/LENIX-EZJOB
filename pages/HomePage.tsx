@@ -27,6 +27,7 @@ import {
     ArrowDown,
 } from 'lucide-react';
 import { useInView } from '../hooks/useInView';
+import { useShouldPlayHeroVideo } from '../hooks/useShouldPlayHeroVideo';
 
 /** Fade-and-rise reveal wrapper, with a variant anchor so entrances aren't
  * identical across every section (`up` is the original, unchanged default).
@@ -220,33 +221,6 @@ const StatCounter: React.FC<{ target: number; suffix: string; active: boolean; c
 
 /** Strips a leading hyphen/en-dash/em-dash (and any surrounding whitespace) that legacy attribution strings may carry, so nothing in this file ever renders a dash as a design flourish. */
 const stripLeadingDash = (text: string) => text.replace(/^[\s–—-]+/, '');
-
-/** Whether the hero's autoplaying background video should actually mount.
- * False (poster image only, no <video> in the DOM at all — not just hidden)
- * under prefers-reduced-motion, or when the browser's own Data Saver mode
- * (navigator.connection.saveData) is on — a real, user-expressed "don't
- * download extra video" preference, unlike guessing from viewport width.
- * Plays on every screen size otherwise, phones included. Re-evaluates live
- * if either signal changes (OS setting or Data Saver toggling mid-session). */
-function useShouldPlayHeroVideo() {
-    const [shouldPlay, setShouldPlay] = useState(false);
-
-    useEffect(() => {
-        if (typeof window === 'undefined' || !window.matchMedia) return;
-        const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const connection = (navigator as any).connection;
-        const update = () => setShouldPlay(!motionQuery.matches && !(connection && connection.saveData));
-        update();
-        motionQuery.addEventListener('change', update);
-        connection?.addEventListener?.('change', update);
-        return () => {
-            motionQuery.removeEventListener('change', update);
-            connection?.removeEventListener?.('change', update);
-        };
-    }, []);
-
-    return shouldPlay;
-}
 
 // Illustrative crew for the hero's rotating worker cutout — not real EZJOB
 // workers, same spirit as this page's other illustrative content (the
