@@ -5,7 +5,7 @@ import { randomBytes } from 'crypto';
 // Server-only (service-role key). Creates an employer login + company
 // profile so an admin can publish a company page for a business that hasn't
 // signed up itself yet. The account gets a random password nobody is told;
-// the company takes it over later via "forgot password" on its own email.
+// handing it over to the company needs a password-reset flow (not built yet).
 // Every caller is verified as an authenticated ADMIN before anything runs.
 const supabaseUrl = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

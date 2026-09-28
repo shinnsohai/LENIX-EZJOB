@@ -379,7 +379,7 @@ const CreateCompanyForm: React.FC<{ onCancel: () => void; onCreated: (employer: 
             <div>
                 <h2 className="text-xl font-extrabold text-slate-900">Create company</h2>
                 <p className="text-xs text-slate-500 mt-1">
-                    Creates an employer login for this email plus an empty company profile. The company can take the account over later with “Forgot password”.
+                    Creates an employer login for this email (with a random password nobody is told) plus an empty company profile. Handing the login over to the company needs a password-reset flow, which the app doesn’t have yet.
                 </p>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

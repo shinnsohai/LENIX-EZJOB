@@ -170,6 +170,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: cleanIdentifier,
             password,
             options: {
+                // Without this, the confirmation link returns to the Supabase
+                // project's "Site URL" (localhost by default) instead of the
+                // domain the person actually signed up on. The origin must
+                // also be in Auth → URL Configuration → Redirect URLs.
+                emailRedirectTo: `${window.location.origin}/login`,
                 data: {
                     role,
                     identifier: cleanIdentifier,
