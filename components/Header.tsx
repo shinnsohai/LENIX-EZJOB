@@ -116,6 +116,10 @@ const Header: React.FC = () => {
                             </Link>
                         )}
 
+                        <Link to="/companies" className={navLinkClass('/companies')}>
+                            {t('nav.companies')}
+                        </Link>
+
                         <Link to="/blog" className={navLinkClass('/blog')}>
                             {t('nav.insights')}
                         </Link>
@@ -232,6 +236,10 @@ const Header: React.FC = () => {
                                 {t('nav.skillPassport')}
                             </Link>
                         )}
+
+                        <Link to="/companies" className={mobileNavLinkClass('/companies')} onClick={closeMobileMenu}>
+                            {t('nav.companies')}
+                        </Link>
 
                         <Link to="/blog" className={mobileNavLinkClass('/blog')} onClick={closeMobileMenu}>
                             {t('nav.insights')}

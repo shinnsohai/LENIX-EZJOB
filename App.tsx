@@ -36,6 +36,7 @@ const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
 const AppliedJobsPage = lazy(() => import('./pages/AppliedJobsPage'));
 const JobDetailPage = lazy(() => import('./pages/JobDetailPage'));
 const CompanyProfilePage = lazy(() => import('./pages/CompanyProfilePage'));
+const CompaniesPage = lazy(() => import('./pages/CompaniesPage'));
 const PublicWorkerProfile = lazy(() => import('./pages/PublicWorkerProfile'));
 
 const RouteFallback: React.FC = () => {
@@ -98,6 +99,7 @@ function App() {
                                         <Route path="/jobs/:id" element={<JobDetailPage />} />
                                         <Route path="/employer/profile/:id" element={<CompanyProfilePage />} />
                                         <Route path="/company/:slug" element={<CompanyProfilePage />} />
+                                        <Route path="/companies" element={<CompaniesPage />} />
 
                                         {/* Static & Legal Pages */}
                                         <Route path="/about" element={<AboutUsPage />} />

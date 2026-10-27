@@ -250,6 +250,40 @@ export const getCompanyPageBySlug = async (slug: string): Promise<{ userId: stri
     return { userId: data.id.slice(COMPANY_PAGE_PREFIX.length), content: data.data as CompanyPageContent };
 };
 
+export interface CompanyDirectoryEntry {
+    profile: EmployerProfile;
+    slug?: string;
+    tagline?: string;
+    openRoles: number;
+}
+
+/**
+ * Every active (non-suspended) company for the public Companies directory,
+ * with its page slug/tagline and live count of Active jobs. Three small
+ * public-read queries merged client-side — fine at directory scale.
+ */
+export const getCompanyDirectory = async (): Promise<CompanyDirectoryEntry[]> => {
+    const [profilesRes, pagesRes, jobsRes] = await Promise.all([
+        supabase.from('employer_profiles').select('*').eq('status', 'Active').order('company_name'),
+        supabase.from('site_content').select('id, slug:data->>slug, tagline:data->>tagline').like('id', `${COMPANY_PAGE_PREFIX}%`),
+        supabase.from('jobs').select('employer_id').eq('status', 'Active'),
+    ]);
+    if (profilesRes.error) throw profilesRes.error;
+    if (pagesRes.error) console.error('Error loading company pages for directory:', pagesRes.error);
+    if (jobsRes.error) console.error('Error loading job counts for directory:', jobsRes.error);
+
+    const pages = new Map((pagesRes.data ?? []).map((row: any) => [row.id.slice(COMPANY_PAGE_PREFIX.length), row]));
+    const openRoles = new Map<string, number>();
+    (jobsRes.data ?? []).forEach((row: any) => openRoles.set(row.employer_id, (openRoles.get(row.employer_id) ?? 0) + 1));
+
+    return (profilesRes.data ?? []).map((profile: any) => ({
+        profile: profile as EmployerProfile,
+        slug: pages.get(profile.user_id)?.slug || undefined,
+        tagline: pages.get(profile.user_id)?.tagline || undefined,
+        openRoles: openRoles.get(profile.user_id) ?? 0,
+    }));
+};
+
 /** Slugs aren't DB-unique (they live inside jsonb), so the admin editor checks before saving. */
 export const isCompanySlugTaken = async (slug: string, exceptUserId: string): Promise<boolean> => {
     const existing = await getCompanyPageBySlug(slug);
