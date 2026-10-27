@@ -78,7 +78,12 @@ export const formatSalary = (amount: number, country: string): string => {
 };
 
 // Helper function to format salary range
+/** Jobs posted without a salary store 0 / 0 — callers show that as "to be
+ * discussed" rather than formatting it as "S$0 - S$0". */
+export const isSalaryDisclosed = (min?: number, max?: number): boolean => (min ?? 0) > 0 || (max ?? 0) > 0;
+
 export const formatSalaryRange = (min: number, max: number, country: string): string => {
     const currency = getCurrencyForCountry(country);
+    if (min === max) return `${currency.symbol}${min.toLocaleString()} ${currency.code}`;
     return `${currency.symbol}${min.toLocaleString()} - ${currency.symbol}${max.toLocaleString()} ${currency.code}`;
 };

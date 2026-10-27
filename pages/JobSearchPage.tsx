@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '../types';
 import { Search, MapPin, DollarSign, Building2, CheckCircle2, Clock, Bus, Home, Users, LayoutGrid, Hand, X, Heart, Target, ChevronDown, Bookmark, BookmarkCheck } from 'lucide-react';
-import { formatSalaryRange } from '../data/currencies';
+import { formatSalaryRange, isSalaryDisclosed } from '../data/currencies';
 import { useLocale } from '../contexts/LocaleContext';
 import type { UIStrings } from '../locales';
 import { rankJobsByMatch, type SkillMatchResult } from '../utils/jobMatch';
@@ -161,7 +161,9 @@ const JobCard: React.FC<{
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-slate-600 dark:text-slate-400">
                         <span className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
                             <DollarSign size={13} className="text-emerald-600 dark:text-emerald-400" />
-                            {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} {t('common.perYear')}
+                            {isSalaryDisclosed(job.salary_min, job.salary_max)
+                                ? `${formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} ${t('common.perYear')}`
+                                : t('common.salaryNotDisclosed')}
                         </span>
                         {job.transport_provided && (
                             <span className="flex items-center gap-1"><Bus size={13} className="text-cyan-600 dark:text-cyan-400" /> {t('jobSearch.transport')}</span>
@@ -421,7 +423,9 @@ const SwipeJobCard = forwardRef<SwipeCardHandle, {
                         <div className="flex items-center gap-1.5">
                             <DollarSign size={14} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                             <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} {t('common.perYear')}
+                                {isSalaryDisclosed(job.salary_min, job.salary_max)
+                                    ? `${formatSalaryRange(job.salary_min ?? 0, job.salary_max ?? 0, job.country)} ${t('common.perYear')}`
+                                    : t('common.salaryNotDisclosed')}
                             </span>
                         </div>
                         {job.shift_schedule && (

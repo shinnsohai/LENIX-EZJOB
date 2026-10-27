@@ -36,6 +36,7 @@ const en = {
     'header.language': 'Language',
 
     'common.perYear': '/ yr',
+    'common.salaryNotDisclosed': 'Salary to be discussed',
     'common.loading': 'Loading…',
 
     'footer.tagline': 'A Clarity E&C Holding enterprise solution powered by LENIX technology. Precision recruitment and authenticated skill credentialing for the skilled trades.',

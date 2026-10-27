@@ -7,7 +7,7 @@ import TalentMarquee from '../components/company/TalentMarquee';
 import { MapPin, Globe, Phone, Mail, Users, Calendar, Building2, Linkedin, Facebook, Instagram, ArrowUpRight, Briefcase, DollarSign, Clock } from 'lucide-react';
 import type { EmployerProfile, Job, CompanyPageContent } from '../types';
 import { UserRole } from '../types';
-import { formatSalaryRange } from '../data/currencies';
+import { formatSalaryRange, isSalaryDisclosed } from '../data/currencies';
 import { useLocale } from '../contexts/LocaleContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -169,7 +169,7 @@ export default function CompanyProfilePage() {
                         <div className="lg:col-span-3 rounded-3xl border border-slate-200/70 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <div className="flex items-center gap-4">
                                 {profile.company_logo_url ? (
-                                    <img src={profile.company_logo_url} alt="" className="h-16 w-16 rounded-2xl border border-slate-200 object-cover dark:border-slate-700" />
+                                    <img src={profile.company_logo_url} alt="" className="h-16 w-16 rounded-2xl border border-slate-200 bg-white object-contain p-1 dark:border-slate-700" />
                                 ) : (
                                     <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-800"><Building2 size={28} /></span>
                                 )}
@@ -314,7 +314,7 @@ export default function CompanyProfilePage() {
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
                                         <span className="flex items-center gap-1.5"><MapPin size={14} /> {job.location}</span>
-                                        <span className="flex items-center gap-1.5"><DollarSign size={14} /> {formatSalaryRange(job.salary_min, job.salary_max, job.country)} {t('common.perYear')}</span>
+                                        <span className="flex items-center gap-1.5"><DollarSign size={14} /> {isSalaryDisclosed(job.salary_min, job.salary_max) ? `${formatSalaryRange(job.salary_min, job.salary_max, job.country)} ${t('common.perYear')}` : t('common.salaryNotDisclosed')}</span>
                                         {job.shift_schedule && <span className="flex items-center gap-1.5"><Clock size={14} /> {job.shift_schedule}</span>}
                                     </div>
                                     <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{job.description}</p>

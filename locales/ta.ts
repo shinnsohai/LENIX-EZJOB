@@ -31,6 +31,7 @@ const ta: UIStrings = {
     'header.language': 'மொழி',
 
     'common.perYear': '/ ஆண்டு',
+    'common.salaryNotDisclosed': 'சம்பளம் பேசித் தீர்மானிக்கப்படும்',
     'common.loading': 'ஏற்றுகிறது…',
 
     'footer.tagline': 'LENIX தொழில்நுட்பத்தால் இயக்கப்படும் Clarity E&C ஹோல்டிங் நிறுவன தீர்வு. திறமையான தொழிலாளர்களுக்கான துல்லியமான ஆட்சேர்ப்பு மற்றும் சரிபார்க்கப்பட்ட திறன் சான்றிதழ்.',

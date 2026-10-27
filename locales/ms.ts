@@ -31,6 +31,7 @@ const ms: UIStrings = {
     'header.language': 'Bahasa',
 
     'common.perYear': '/ tahun',
+    'common.salaryNotDisclosed': 'Gaji boleh dirunding',
     'common.loading': 'Memuatkan…',
 
     'footer.tagline': 'Penyelesaian perusahaan Clarity E&C Holding dikuasakan oleh teknologi LENIX. Pengambilan pekerja yang tepat dan pengesahan kemahiran yang sahih untuk pekerja mahir.',

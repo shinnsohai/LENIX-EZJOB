@@ -84,7 +84,7 @@ const CompaniesPage: React.FC = () => {
                                         >
                                             <div className="flex items-center gap-4">
                                                 {profile.company_logo_url ? (
-                                                    <img src={profile.company_logo_url} alt="" className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
+                                                    <img src={profile.company_logo_url} alt="" className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-1 dark:border-slate-700" />
                                                 ) : (
                                                     <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white ${avatarStyle(profile.company_name)}`}>
                                                         {profile.company_name.charAt(0).toUpperCase()}

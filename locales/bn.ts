@@ -31,6 +31,7 @@ const bn: UIStrings = {
     'header.language': 'ভাষা',
 
     'common.perYear': '/ বছর',
+    'common.salaryNotDisclosed': 'বেতন আলোচনাসাপেক্ষ',
     'common.loading': 'লোড হচ্ছে…',
 
     'footer.tagline': 'LENIX প্রযুক্তি দ্বারা পরিচালিত একটি Clarity E&C হোল্ডিং এন্টারপ্রাইজ সমাধান। দক্ষ শ্রমিকদের জন্য নির্ভুল নিয়োগ এবং প্রমাণিত দক্ষতা সনদায়ন।',

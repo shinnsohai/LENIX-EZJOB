@@ -110,7 +110,7 @@ const CompanyHero: React.FC<CompanyHeroProps> = ({ companyName, logoUrl, videoUr
                     className="flex items-center whitespace-nowrap bg-white/90 backdrop-blur-2xl px-1.5 py-1.5 rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.08)] border border-slate-200/40 dark:bg-slate-800/90 dark:border-slate-700/60"
                 >
                     <span className="flex w-9 h-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white border border-slate-100 shadow-sm text-[#0a1b33] dark:border-slate-700">
-                        {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-cover" /> : '✦'}
+                        {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full bg-white object-contain p-0.5" /> : '✦'}
                     </span>
                     <button type="button" onClick={onOpenRoles} className="px-3 sm:px-4 py-2 text-[12px] font-semibold text-slate-500 hover:text-[#0a1b33] transition-colors dark:text-slate-400 dark:hover:text-white">
                         Open Roles

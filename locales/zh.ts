@@ -31,6 +31,7 @@ const zh: UIStrings = {
     'header.language': '语言',
 
     'common.perYear': '/ 年',
+    'common.salaryNotDisclosed': '薪资面议',
     'common.loading': '加载中…',
 
     'footer.tagline': 'Clarity E&C 控股企业解决方案，由 LENIX 技术提供支持。为技术工种提供精准招聘与真实技能认证。',

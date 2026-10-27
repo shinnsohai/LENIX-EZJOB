@@ -23,7 +23,7 @@ import {
 } from '../services/db';
 import Spinner from '../components/Spinner';
 import { countries, Country } from '../data/countries';
-import { getCurrencyForCountry, formatSalaryRange } from '../data/currencies';
+import { getCurrencyForCountry, formatSalaryRange, isSalaryDisclosed } from '../data/currencies';
 import { TRANSLATION_LANGUAGES } from '../data/languages';
 import { computeSkillMatch, flattenWorkerSkills } from '../utils/jobMatch';
 
@@ -1513,7 +1513,9 @@ Welder,Houston,United States,50000,70000,Certified welder for industrial project
                                         </div>
                                         <p className="text-sm text-gray-500">{job.employer_name} &middot; {job.location}, {job.country}</p>
                                         <p className="text-sm font-semibold text-emerald-600 mt-1">
-                                            {formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr
+                                            {isSalaryDisclosed(job.salary_min, job.salary_max)
+                                                ? `${formatSalaryRange(job.salary_min, job.salary_max, job.country)} / yr`
+                                                : 'Salary to be discussed'}
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
                                             {applicantCounts[job.id] ?? 0} applicant{(applicantCounts[job.id] ?? 0) === 1 ? '' : 's'}

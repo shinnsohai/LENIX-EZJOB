@@ -8,7 +8,7 @@ import Spinner from '../components/Spinner';
 import { MapPin, DollarSign, Briefcase, Calendar, Building2, ArrowLeft, CheckCircle, Clock, Bus, Home, MessageCircle, Gift, Languages, Users, Plus, Check } from 'lucide-react';
 import { UserRole } from '../types';
 import type { Job, WorkerProfile, EmployerProfile } from '../types';
-import { formatSalaryRange } from '../data/currencies';
+import { formatSalaryRange, isSalaryDisclosed } from '../data/currencies';
 import { TRANSLATION_LANGUAGES, languageLabel } from '../data/languages';
 import { useLocale } from '../contexts/LocaleContext';
 import { flattenWorkerSkills, computeSkillMatch } from '../utils/jobMatch';
@@ -209,7 +209,7 @@ export default function JobDetailPage() {
                                 className="text-emerald-600 font-semibold hover:text-emerald-700 hover:underline text-lg mb-2 inline-flex items-center gap-2"
                             >
                                 {employerProfile?.company_logo_url ? (
-                                    <img src={employerProfile.company_logo_url} alt="" className="h-6 w-6 rounded object-cover flex-shrink-0" />
+                                    <img src={employerProfile.company_logo_url} alt="" className="h-6 w-6 rounded bg-white object-contain flex-shrink-0" />
                                 ) : (
                                     <Building2 size={20} className="flex-shrink-0" />
                                 )}
@@ -224,7 +224,7 @@ export default function JobDetailPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <DollarSign size={18} />
-                                    <span>{formatSalaryRange(job.salary_min, job.salary_max, job.country)} {t('common.perYear')}</span>
+                                    <span>{isSalaryDisclosed(job.salary_min, job.salary_max) ? `${formatSalaryRange(job.salary_min, job.salary_max, job.country)} ${t('common.perYear')}` : t('common.salaryNotDisclosed')}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Briefcase size={18} />

@@ -31,6 +31,7 @@ const my: UIStrings = {
     'header.language': 'ဘာသာစကား',
 
     'common.perYear': '/ နှစ်',
+    'common.salaryNotDisclosed': 'လစာ ညှိနှိုင်းရန်',
     'common.loading': 'တင်နေသည်…',
 
     'footer.tagline': 'LENIX နည်းပညာဖြင့် ပံ့ပိုးသည့် Clarity E&C Holding လုပ်ငန်းဆိုင်ရာ ဖြေရှင်းချက်တစ်ခုဖြစ်သည်။ ကျွမ်းကျင်လုပ်သားများအတွက် တိကျသောခေါ်ယူခြင်းနှင့် အတည်ပြုထားသည့် ကျွမ်းကျင်မှု အသိအမှတ်ပြုလက်မှတ်။',
